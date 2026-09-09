@@ -405,36 +405,36 @@ if app_mode == "📝 Formulaire Prestataire":
     )
 
 else:
-    st.sidebar.markdown("### 📊 Indicateurs Administrateur")
+    st.sidebar.markdown("### 📊 Traçabilité Administrateur")
     df_admin_side = charger_tous_les_audits()
 
     if not df_admin_side.empty:
         total_audits_count = len(df_admin_side)
         scores_list = []
         
-        for _, row in df_admin_side.iterrows():
+        admin_options_sidebar = []
+        for idx, row in df_admin_side.iterrows():
             o_c = sum(1 for c in row.index if c.endswith("_Réponse") and str(row[c]).strip() == "Oui")
             n_c = sum(1 for c in row.index if c.endswith("_Réponse") and str(row[c]).strip() == "Non")
             t_app = o_c + n_c
-            if t_app > 0:
-                scores_list.append((o_c / t_app) * 100)
-
-        avg_score_val = (sum(scores_list) / len(scores_list)) if scores_list else 0.0
-        
-        st.sidebar.metric("Total d'audits reçus", total_audits_count)
-        st.sidebar.metric("Moyenne de conformité", f"{avg_score_val:.1f} %")
-        st.sidebar.markdown("---")
-        
-        st.sidebar.markdown("### 📂 Choix de l'Audit")
-        admin_options_sidebar = []
-        for idx, row in df_admin_side.iterrows():
+            sc = (o_c / t_app * 100) if t_app > 0 else 0.0
+            scores_list.append(sc)
+            
+            badge_icon = "🟢" if sc >= 80 else ("🟠" if sc >= 50 else "🔴")
             ent = row.get("Entreprise", "Inconnu")
             dt = row.get("Date", "N/A")
             st_name = row.get("Site", "N/A")
-            admin_options_sidebar.append(f"{ent} — {dt} ({st_name})")
-            
+            admin_options_sidebar.append(f"{badge_icon} {sc:.0f}% | {ent} — {dt} ({st_name})")
+
+        avg_score_val = (sum(scores_list) / len(scores_list)) if scores_list else 0.0
+        
+        st.sidebar.metric("Total d'audits enregistrés", total_audits_count)
+        st.sidebar.metric("Conformité moyenne", f"{avg_score_val:.1f} %")
+        st.sidebar.markdown("---")
+        
+        st.sidebar.markdown("### 📂 Sélection de l'Audit")
         selected_admin_sidebar_idx = st.sidebar.selectbox(
-            "Sélectionner un audit à consulter :",
+            "Consulter un audit spécifique :",
             range(len(admin_options_sidebar)),
             format_func=lambda x: admin_options_sidebar[x],
             key="sidebar_admin_audit_select"
@@ -653,12 +653,12 @@ else:
     input_pwd = st.text_input("🔑 Saisissez le mot de passe Administrateur :", type="password")
     
     if input_pwd == "":
-        st.info("🔒 Cet espace est strictly réservé à la consultation administrateur.")
+        st.info("🔒 Cet espace est strictement réservé à la consultation administrateur.")
     elif input_pwd != ADMIN_PASSWORD:
         st.error("❌ Mot de passe incorrect.")
     else:
         st.success("🔓 Accès administrateur autorisé.")
-        st.markdown("""<div class="sub-header">Consultez l'ensemble des audits validés, analysez le score global et exportez le rapport Excel mis en forme.</div>""", unsafe_allow_html=True)
+        st.markdown("""<div class="sub-header">Consultez l'ensemble des audits validés, analysez la traçabilité globale et exportez les rapports Excel.</div>""", unsafe_allow_html=True)
         
         if st.button("🔄 Actualiser la liste des audits"):
             st.cache_data.clear()
@@ -668,6 +668,35 @@ else:
         if df_audits.empty:
             st.info("Aucun audit n'a encore été enregistré dans la base.")
         else:
+            # --- TABLEAU RÉCAPITULATIF DE TRAÇABILITÉ GLOBALE ---
+            st.markdown("---")
+            st.subheader("📋 Tableau de Bord & Traçabilité des Audits")
+            
+            recap_data = []
+            for idx, row in df_audits.iterrows():
+                oui_c = sum(1 for col in row.index if col.endswith("_Réponse") and str(row[col]).strip() == "Oui")
+                non_c = sum(1 for col in row.index if col.endswith("_Réponse") and str(row[col]).strip() == "Non")
+                na_c = sum(1 for col in row.index if col.endswith("_Réponse") and str(row[col]).strip() == "N/A")
+                t_app = oui_c + non_c
+                score = (oui_c / t_app * 100) if t_app > 0 else 0.0
+                statut_str = "🟢 Conforme" if score >= 80 else ("🟠 À améliorer" if score >= 50 else "🔴 Non conforme")
+
+                recap_data.append({
+                    "Date": row.get("Date", "N/A"),
+                    "Entreprise": row.get("Entreprise", "N/A"),
+                    "Site": row.get("Site", "N/A"),
+                    "Déclarant": row.get("Déclarant", "N/A"),
+                    "Score Global (%)": f"{score:.1f} %",
+                    "Statut": statut_str,
+                    "Oui": oui_c,
+                    "Non": non_c,
+                    "N/A": na_c
+                })
+
+            df_recap = pd.DataFrame(recap_data)
+            st.dataframe(df_recap, use_container_width=True, hide_index=True)
+
+            # --- SELECTION DE LA FICHE DETAIL---
             selected_idx = st.session_state.get("sidebar_admin_audit_select", 0)
             if selected_idx >= len(df_audits):
                 selected_idx = 0
@@ -675,7 +704,7 @@ else:
             selected_row = df_audits.iloc[selected_idx]
             
             st.markdown("---")
-            st.subheader(f"📄 Fiche Audit : {selected_row.get('Entreprise', 'N/A')}")
+            st.subheader(f"📄 Fiche Détail Audit : {selected_row.get('Entreprise', 'N/A')}")
             
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("🏢 Entreprise", str(selected_row.get("Entreprise", "N/A")))

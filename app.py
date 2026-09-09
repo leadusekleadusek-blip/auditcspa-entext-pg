@@ -1,8 +1,18 @@
 import streamlit as st
 import pandas as pd
 import json
+import io
 from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
+
+# Import des bibliothèques Google Drive
+try:
+    from google.oauth2 import service_account
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaIoBaseUpload
+    DRIVE_LIB_AVAILABLE = True
+except ImportError:
+    DRIVE_LIB_AVAILABLE = False
 
 # Configuration de la page
 st.set_page_config(
@@ -52,7 +62,47 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown("""<div class="main-header">🛡️ Formulaire d'Audit Sécurité & HSE</div>""", unsafe_allow_html=True)
-st.markdown("""<div class="sub-header">Évaluation de conformité pour les entreprises extérieures. Merci de répondre à chaque question et de fournir les justifications nécessaires.</div>""", unsafe_allow_html=True)
+st.markdown("""<div class="sub-header">Évaluation de conformité pour les entreprises extérieures. Merci de répondre à chaque question, de fournir les justifications et de joindre vos documents si nécessaire.</div>""", unsafe_allow_html=True)
+
+# Fonction d'envoi de fichier vers Google Drive
+def upload_file_to_drive(uploaded_file, company_name, q_id):
+    if not DRIVE_LIB_AVAILABLE:
+        return f"Fichier joint : {uploaded_file.name} (Bibliothèque Drive non installée)"
+    
+    try:
+        creds_info = None
+        if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
+            creds_info = dict(st.secrets["connections"]["gsheets"])
+        elif "gcp_service_account" in st.secrets:
+            creds_info = dict(st.secrets["gcp_service_account"])
+            
+        if not creds_info:
+            return f"Fichier joint : {uploaded_file.name} (Service Account non configuré)"
+
+        creds = service_account.Credentials.from_service_account_info(
+            creds_info,
+            scopes=['https://www.googleapis.com/auth/drive.file']
+        )
+        service = build('drive', 'v3', credentials=creds)
+
+        file_metadata = {
+            'name': f"{company_name}_{q_id}_{uploaded_file.name}"
+        }
+        
+        if "drive_folder_id" in st.secrets:
+            file_metadata['parents'] = [st.secrets["drive_folder_id"]]
+
+        media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getvalue()), mimetype=uploaded_file.type)
+        file_res = service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
+        
+        service.permissions().create(
+            fileId=file_res.get('id'),
+            body={'type': 'anyone', 'role': 'reader'}
+        ).execute()
+
+        return file_res.get('webViewLink')
+    except Exception as e:
+        return f"Fichier joint : {uploaded_file.name} (Info : {str(e)})"
 
 # Base complète des 54 questions
 QUESTIONS_DATA = [
@@ -139,11 +189,11 @@ QUESTIONS_DATA = [
 
 # Option : Reprendre un brouillon enregistre
 with st.expander("📂 Reprendre un brouillon enregistré auparavant (Optionnel)", expanded=False):
-    uploaded_file = st.file_uploader("Si vous avez téléchargé un fichier de brouillon (.json), importez-le ici :", type=["json"])
+    uploaded_draft = st.file_uploader("Si vous avez téléchargé un fichier de brouillon (.json), importez-le ici :", type=["json"], key="draft_importer")
     draft_data = {}
-    if uploaded_file is not None:
+    if uploaded_draft is not None:
         try:
-            draft_data = json.load(uploaded_file)
+            draft_data = json.load(uploaded_draft)
             st.success("✅ Brouillon chargé avec succès ! Vos réponses précédentes ont été appliquées.")
         except Exception as e:
             st.error("⚠️ Fichier de brouillon invalide.")
@@ -164,6 +214,7 @@ with st.form(key="audit_form"):
 
     categories = sorted(list(set(q["cat"] for q in QUESTIONS_DATA)))
     responses = {}
+    uploaded_files_dict = {}
     
     for cat in categories:
         st.markdown(f"### 📌 {cat}")
@@ -197,10 +248,20 @@ with st.form(key="audit_form"):
                     height=80
                 )
             
+            # Champ pour joindre une pièce justificative spécifique
+            file_attached = st.file_uploader(
+                f"📎 Pièce justificative pour [{q['id']}] (Optionnel - PDF, Image, Excel, Word)",
+                type=["pdf", "png", "jpg", "jpeg", "docx", "xlsx"],
+                key=f"file_{q['id']}"
+            )
+            
             responses[q['id']] = {
                 "status": status,
                 "justification": justification
             }
+            if file_attached is not None:
+                uploaded_files_dict[q['id']] = file_attached
+                
             st.markdown("<hr style='margin: 15px 0; border-top: 1px dashed #E5E7EB;'>", unsafe_allow_html=True)
 
     submit_button = st.form_submit_button(label="🚀 VALIDER ET ENVOYER L'AUDIT")
@@ -220,6 +281,8 @@ if submit_button:
     elif unjustified:
         st.warning(f"⚠️ Une justification est requise pour toute réponse 'Non' ou 'N/A'. Question(s) concernée(s) : {', '.join(unjustified)}")
     else:
+        st.info("⏳ Enregistrement de l'audit en cours...")
+        
         record = {
             "Date": str(audit_date),
             "Entreprise": company_name,
@@ -227,9 +290,18 @@ if submit_button:
             "Site": site_location,
         }
         
+        # Traitement des questions et fichiers
         for q_id, res in responses.items():
             record[f"{q_id}_Réponse"] = res["status"]
             record[f"{q_id}_Justification"] = res["justification"]
+            
+            # Traitement de la pièce jointe
+            if q_id in uploaded_files_dict:
+                file_obj = uploaded_files_dict[q_id]
+                drive_link_or_name = upload_file_to_drive(file_obj, company_name, q_id)
+                record[f"{q_id}_Fichier"] = drive_link_or_name
+            else:
+                record[f"{q_id}_Fichier"] = ""
         
         try:
             conn = st.connection("gsheets", type=GSheetsConnection)
@@ -238,12 +310,12 @@ if submit_button:
             updated_df = pd.concat([existing_data, df_new], ignore_index=True)
             conn.update(data=updated_df)
             
-            st.success("✅ Audit enregistré avec succès dans la base centrale !")
+            st.success("✅ Audit et pièces justificatives enregistrés avec succès dans la base centrale !")
             st.balloons()
         except Exception as e:
             st.success("✅ Vos réponses ont été enregistrées localement.")
             st.download_button(
-                label="📥 Télécharger votre copie d'audit (CSV / Excel)",
+                label="📥 Télécharger votre copie d'audit complète (CSV / Excel)",
                 data=pd.DataFrame([record]).to_csv(index=False).encode('utf-8'),
                 file_name=f"Audit_{company_name}_{audit_date}.csv",
                 mime="text/csv"

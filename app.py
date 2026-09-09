@@ -84,7 +84,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Base complète des 54 questions
+# Base des questions (réparties sur les 5 grands thèmes)
 QUESTIONS_DATA = [
     # Thème 1 : Attentes & Engagement
     {"id": "1.1", "theme": "1. Attentes & Engagement", "cat": "1. Attentes & Engagement", "q": "Programme de sécurité complet en place sur le site", "g": "• Manuel numérique spécifique au site rédigé et documenté\n• Doit englober tous les aspects des livrables sécurité définis dans le cahier des charges"},
@@ -221,7 +221,6 @@ def get_color_badge(percentage):
         return f"🔴 **{percentage:.1f}% (Non conforme / Risque élevé)**"
 
 def generer_excel_formatted(selected_data):
-    """Génère le rapport Excel mis en forme pour un dictionnaire ou une ligne DataFrame."""
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Rapport Audit"
@@ -315,7 +314,6 @@ def generer_excel_formatted(selected_data):
     return buffer.getvalue()
 
 def charger_tous_les_audits():
-    """Récupère les audits depuis Google Sheets et le stockage de la session."""
     audits_list = []
     
     try:
@@ -575,7 +573,7 @@ if app_mode == "📝 Formulaire Prestataire":
         if missing_fields:
             st.error(f"⚠️ Veuillez remplir les informations obligatoires : {', '.join(missing_fields)}.")
         elif unanswered:
-            st.warning(f"⚠️ Vous devez répondre à toutes les questions (54 au total). Question(s) non renseignée(s) : {', '.join(unanswered)}")
+            st.warning(f"⚠️ Vous devez répondre à toutes les questions ({len(QUESTIONS_DATA)} au total). Question(s) non renseignée(s) : {', '.join(unanswered)}")
         elif unjustified:
             st.warning(f"⚠️ La justification est OBLIGATOIRE pour chaque question (même pour les réponses 'Oui'). Question(s) sans justification : {', '.join(unjustified)}")
         else:
@@ -655,7 +653,7 @@ else:
     input_pwd = st.text_input("🔑 Saisissez le mot de passe Administrateur :", type="password")
     
     if input_pwd == "":
-        st.info("🔒 Cet espace est strictement réservé à la consultation administrateur.")
+        st.info("🔒 Cet espace est strictly réservé à la consultation administrateur.")
     elif input_pwd != ADMIN_PASSWORD:
         st.error("❌ Mot de passe incorrect.")
     else:

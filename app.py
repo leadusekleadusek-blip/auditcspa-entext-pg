@@ -1,9 +1,13 @@
-import streamlit as st
-import pandas as pd
 import json
 import io
 from datetime import datetime
+import streamlit as st
+import pandas as pd
 from streamlit_gsheets import GSheetsConnection
+
+# Import d'openpyxl pour la mise en forme de l'export Excel
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 # Import des bibliothèques Google Drive
 try:
@@ -22,13 +26,12 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Style CSS sur mesure pour améliorer la lisibilité, les cartes de questions et la mise en page
+# Style CSS sur mesure
 st.markdown("""
     <style>
     .main-header { font-size: 28px; font-weight: bold; color: #1E3A8A; margin-bottom: 5px; }
     .sub-header { font-size: 15px; color: #4B5563; margin-bottom: 20px; }
     
-    /* Carte de question avec bordure marquée et ombre */
     .question-card {
         background-color: #FFFFFF;
         border: 2px solid #CBD5E1;
@@ -38,7 +41,6 @@ st.markdown("""
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
     }
     
-    /* Titre de question plus gros et plus lisible */
     .question-title-big {
         font-size: 20px !important;
         font-weight: 700 !important;
@@ -78,7 +80,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Base complète des 54 questions réparties sur 5 grands thèmes
+# Base complète des 54 questions
 QUESTIONS_DATA = [
     # Thème 1 : Attentes & Engagement
     {"id": "1.1", "theme": "1. Attentes & Engagement", "cat": "1. Attentes & Engagement", "q": "Programme de sécurité complet en place sur le site", "g": "• Manuel numérique spécifique au site rédigé et documenté\n• Doit englober tous les aspects des livrables sécurité définis dans le cahier des charges"},
@@ -135,7 +137,7 @@ QUESTIONS_DATA = [
     {"id": "3.2.23", "theme": "3. Risques Critiques & Meilleures Pratiques", "cat": "3.2 Meilleures Pratiques", "q": "Protection Respiratoire", "g": "Choix des masques adaptés, tests d'ajustement (fit-test) et règles de port"},
     {"id": "3.2.24", "theme": "3. Risques Critiques & Meilleures Pratiques", "cat": "3.2 Meilleures Pratiques", "q": "Signalisation et Balisage des Dangers", "g": "Panneaux d'avertissement et barrières physiques installés en face du danger"},
     {"id": "3.2.25", "theme": "3. Risques Critiques & Meilleures Pratiques", "cat": "3.2 Meilleures Pratiques", "q": "Prévention des Addictions (Alcool / Drogues)", "g": "Politique d'interdiction formalisée et contrôles applicables aux sous-traitants"},
-    {"id": "3.2.26", "cat": "3.2 Meilleures Pratiques", "theme": "3. Risques Critiques & Meilleures Pratiques", "q": "Conduite de Chariots et Engins de Chantier", "g": "Autorisations de conduite à jour et vérification des compétences des opérateurs"},
+    {"id": "3.2.26", "theme": "3. Risques Critiques & Meilleures Pratiques", "cat": "3.2 Meilleures Pratiques", "q": "Conduite de Chariots et Engins de Chantier", "g": "Autorisations de conduite à jour et vérification des compétences des opérateurs"},
     {"id": "3.2.27", "theme": "3. Risques Critiques & Meilleures Pratiques", "cat": "3.2 Meilleures Pratiques", "q": "Outillage Électroportatif", "g": "Outillage conforme, inspecté avant emploi et personnel formé"},
     {"id": "3.2.28", "theme": "3. Risques Critiques & Meilleures Pratiques", "cat": "3.2 Meilleures Pratiques", "q": "Risques Biologiques et Pathogènes", "g": "Mesures de prévention contre les risques d'exposition biologique"},
     {"id": "3.2.29", "theme": "3. Risques Critiques & Meilleures Pratiques", "cat": "3.2 Meilleures Pratiques", "q": "Gestion des Non-Conformités Sécurité", "g": "Procédure disciplinaire pouvant aller jusqu'à l'exclusion du site en cas de manquement grave"},
@@ -215,7 +217,108 @@ def get_color_badge(percentage):
         return f"🔴 **{percentage:.1f}% (Non conforme / Risque élevé)**"
 
 # ==========================================
-# CALCUL DYNAMIQUE DU SCORE EN TEMPS RÉEL (POUR SIDEBAR ET FORMULAIRE)
+# FONCTION DE GÉNÉRATION DU FICHIER EXCEL STRUCTURÉ
+# ==========================================
+def generer_excel_formatted(selected_row):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Rapport Audit"
+
+    # Largeurs des colonnes
+    col_widths = {'A': 14, 'B': 25, 'C': 45, 'D': 16, 'E': 45}
+    for col, width in col_widths.items():
+        ws.column_dimensions[col].width = width
+
+    # 1. Bandeau supérieur : Informations de l'Entreprise Extérieure
+    ws.merge_cells('A1:E1')
+    banner = ws['A1']
+    banner.value = "INFORMATIONS DE L'ENTREPRISE EXTÉRIEURE"
+    banner.font = Font(name='Calibri', size=13, bold=True, color="FFFFFF")
+    banner.fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
+    banner.alignment = Alignment(horizontal='center', vertical='center')
+    ws.row_dimensions[1].height = 28
+
+    # Calcul du score global pour les métadonnées
+    oui_c = sum(1 for col in selected_row.index if col.endswith("_Réponse") and str(selected_row[col]).strip() == "Oui")
+    non_c = sum(1 for col in selected_row.index if col.endswith("_Réponse") and str(selected_row[col]).strip() == "Non")
+    tot_app = oui_c + non_c
+    score_p = (oui_c / tot_app * 100) if tot_app > 0 else 0.0
+
+    # 2. Métadonnées du bloc Entreprise Extérieure
+    label_font = Font(name='Calibri', bold=True, color="1F4E78")
+
+    ws['A3'] = "Entreprise :"
+    ws['A3'].font = label_font
+    ws['B3'] = str(selected_row.get("Entreprise", "N/A"))
+
+    ws['D3'] = "Date de l'audit :"
+    ws['D3'].font = label_font
+    ws['E3'] = str(selected_row.get("Date", "N/A"))
+
+    ws['A4'] = "Site :"
+    ws['A4'].font = label_font
+    ws['B4'] = str(selected_row.get("Site", "N/A"))
+
+    ws['D4'] = "Déclarant / Auditeur :"
+    ws['D4'].font = label_font
+    ws['E4'] = str(selected_row.get("Déclarant", "N/A"))
+
+    ws['A5'] = "Score de conformité :"
+    ws['A5'].font = label_font
+    ws['B5'] = f"{score_p:.1f}%"
+
+    # 3. En-têtes du tableau (Ligne 7)
+    headers = ["N° question", "Thème", "Question", "Réponse", "Justification"]
+    ws.row_dimensions[7].height = 24
+
+    header_fill = PatternFill(start_color="2F5597", end_color="2F5597", fill_type="solid")
+    header_font = Font(name='Calibri', size=11, bold=True, color="FFFFFF")
+    thin_border = Border(
+        left=Side(style='thin', color='D9D9D9'),
+        right=Side(style='thin', color='D9D9D9'),
+        top=Side(style='thin', color='D9D9D9'),
+        bottom=Side(style='thin', color='D9D9D9')
+    )
+
+    for col_idx, text in enumerate(headers, start=1):
+        cell = ws.cell(row=7, column=col_idx, value=text)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+        cell.border = thin_border
+
+    # 4. Lignes des questions
+    for row_idx, q in enumerate(QUESTIONS_DATA, start=8):
+        q_id = q["id"]
+        reponse_val = str(selected_row.get(f"{q_id}_Réponse", "")).strip()
+        justif_val = str(selected_row.get(f"{q_id}_Justification", "")).strip()
+
+        row_vals = [q_id, q["theme"], q["q"], reponse_val, justif_val]
+        ws.row_dimensions[row_idx].height = 22
+
+        for col_idx, val in enumerate(row_vals, start=1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=val)
+            cell.border = thin_border
+            is_center = col_idx in (1, 4)
+            cell.alignment = Alignment(
+                horizontal='center' if is_center else 'left',
+                vertical='center',
+                wrap_text=True
+            )
+
+            # Couleur conditionnelle pour la réponse
+            if col_idx == 4:
+                if reponse_val in ["Oui", "Conforme"]:
+                    cell.font = Font(name='Calibri', bold=True, color="16A34A")
+                elif reponse_val in ["Non", "Non conforme"]:
+                    cell.font = Font(name='Calibri', bold=True, color="DC2626")
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    return buffer.getvalue()
+
+# ==========================================
+# CALCUL DYNAMIQUE DU SCORE EN TEMPS RÉEL
 # ==========================================
 total_q = len(QUESTIONS_DATA)
 answered_q_count = 0
@@ -262,7 +365,6 @@ st.sidebar.progress(progress_ratio)
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📌 Navigation & Scores par Thème")
 
-# Affichage des scores individuels par thème dans la sidebar
 for idx, t_name in enumerate(THEME_LIST):
     ts = theme_stats[t_name]
     t_app = ts["oui"] + ts["non"]
@@ -288,7 +390,6 @@ with tab_form:
     st.markdown("""<div class="main-header">🛡️ Formulaire d'Audit Sécurité & HSE</div>""", unsafe_allow_html=True)
     st.markdown("""<div class="sub-header">Évaluation de conformité pour les entreprises extérieures. Merci de répondre à chaque question et de fournir obligatoirement une justification.</div>""", unsafe_allow_html=True)
 
-    # Bannière récapitulative fixe en haut du formulaire
     col_sc1, col_sc2, col_sc3 = st.columns([1, 1, 2])
     with col_sc1:
         st.metric("Score Global Oui", f"{global_score_pct:.1f} %")
@@ -320,7 +421,6 @@ with tab_form:
     st.markdown("---")
     st.subheader("2. Grille d'Évaluation des Exigences Sécurité")
 
-    # Filtrage selon le thème sélectionné dans la sidebar
     if selected_theme_nav == "📋 Tous les thèmes":
         filtered_themes = THEME_LIST
     else:
@@ -331,12 +431,9 @@ with tab_form:
 
     for t_name in filtered_themes:
         st.markdown(f"## 📌 {t_name}")
-        
-        # Récupération de l'ensemble des questions du thème
         theme_questions = [q for q in QUESTIONS_DATA if q["theme"] == t_name]
         
         for q in theme_questions:
-            # Container visuel distinct pour chaque question avec carte encadrée et titre plus gros
             st.markdown(
                 f'<div class="question-card"><div class="question-title-big">[{q["id"]}] {q["q"]}</div></div>',
                 unsafe_allow_html=True
@@ -350,7 +447,6 @@ with tab_form:
 
             c1, c2 = st.columns([1, 2])
             with c1:
-                # index=None -> Aucune case cochée par défaut
                 status_index = ["Oui", "Non", "N/A"].index(saved_status) if saved_status in ["Oui", "Non", "N/A"] else None
                 status = st.radio(
                     f"Réponse pour [{q['id']}]",
@@ -383,7 +479,6 @@ with tab_form:
                 
             st.markdown("<hr style='margin: 20px 0; border-top: 2px dashed #94A3B8;'>", unsafe_allow_html=True)
 
-    # Consolidation de toutes les réponses (y compris des thèmes non affichés actuellement)
     for q in QUESTIONS_DATA:
         if q['id'] not in responses:
             q_stat = st.session_state.get(f"status_{q['id']}", None)
@@ -402,7 +497,6 @@ with tab_form:
         if not site_location: missing_fields.append("Site / Chantier")
         
         unanswered = [q_id for q_id, res in responses.items() if res["status"] is None]
-        # Justification OBLIGATOIRE peu importe la réponse cochée (Oui, Non ou N/A)
         unjustified = [q_id for q_id, res in responses.items() if res["status"] is not None and not res["justification"].strip()]
                 
         if missing_fields:
@@ -444,7 +538,7 @@ with tab_form:
             except Exception:
                 st.success("✅ Vos réponses ont été enregistrées localement.")
                 st.download_button(
-                    label="📥 Télécharger votre copie d'audit (CSV / Excel)",
+                    label="📥 Télécharger votre copie d'audit (CSV)",
                     data=pd.DataFrame([record]).to_csv(index=False).encode('utf-8'),
                     file_name=f"Audit_{company_name}_{audit_date}.csv",
                     mime="text/csv"
@@ -470,7 +564,7 @@ with tab_form:
     )
 
 # ==========================================
-# ONGLET 2 : ESPACE ADMINISTRATEUR HSE (PROTÉGÉ PAR MOT DE PASSE)
+# ONGLET 2 : ESPACE ADMINISTRATEUR HSE
 # ==========================================
 with tab_admin:
     st.markdown("""<div class="main-header">🔒 Espace d'Administration HSE</div>""", unsafe_allow_html=True)
@@ -479,12 +573,12 @@ with tab_admin:
     input_pwd = st.text_input("🔑 Saisissez le mot de passe Administrateur :", type="password")
     
     if input_pwd == "":
-        st.info("🔒 Cet espace est strictement réservé à la consultation administrateur.")
+        st.info("🔒 Cet espace est strictly réservé à la consultation administrateur.")
     elif input_pwd != ADMIN_PASSWORD:
         st.error("❌ Mot de passe incorrect.")
     else:
         st.success("🔓 Accès administrateur autorisé.")
-        st.markdown("""<div class="sub-header">Consultez l'ensemble des audits validés, analysez le score global et visualisez le score par thème.</div>""", unsafe_allow_html=True)
+        st.markdown("""<div class="sub-header">Consultez l'ensemble des audits validés, analysez le score global et exportez le rapport Excel mis en forme.</div>""", unsafe_allow_html=True)
         
         if st.button("🔄 Actualiser la liste des audits"):
             st.cache_data.clear()
@@ -538,9 +632,24 @@ with tab_admin:
             m3.metric("❌ Non Conforme (Non)", non_count)
             m4.metric("⚪ Non Applicable (N/A)", na_count)
             
-            # Échelle de couleur visuelle pour le résultat global
             st.markdown(f"**Évaluation du score total :** {get_color_badge(score_percentage_admin)}")
             st.progress(score_percentage_admin / 100.0)
+            
+            # ==========================================
+            # BOUTON EXPORT EXCEL MIS EN FORME
+            # ==========================================
+            st.markdown(" ")
+            excel_bytes = generer_excel_formatted(selected_row)
+            nom_entreprise_clean = str(selected_row.get("Entreprise", "Audit")).replace(" ", "_")
+            date_clean = str(selected_row.get("Date", "2026"))
+
+            st.download_button(
+                label="📥 TÉLÉCHARGER LE RAPPORT EXCEL MIS EN FORME (.XLSX)",
+                data=excel_bytes,
+                file_name=f"Audit_{nom_entreprise_clean}_{date_clean}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="primary"
+            )
             
             st.markdown("---")
             st.markdown("### 🎯 Score Détaillé par Thème (5 Thèmes Sécurité)")

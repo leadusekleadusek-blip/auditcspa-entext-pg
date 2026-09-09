@@ -26,7 +26,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Initialisation d'une base locale permanente dans la session
+# Initialisation de la base locale dans la session
 if "local_audits" not in st.session_state:
     st.session_state["local_audits"] = []
 
@@ -220,10 +220,13 @@ def get_color_badge(percentage):
     else:
         return f"🔴 **{percentage:.1f}% (Non conforme / Risque élevé)**"
 
-def generer_excel_formatted(selected_row):
+def generer_excel_formatted(selected_data):
+    """Génère le rapport Excel mis en forme pour un dictionnaire ou une ligne DataFrame."""
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Rapport Audit"
+
+    data_dict = selected_data.to_dict() if isinstance(selected_data, pd.Series) else dict(selected_data)
 
     col_widths = {'A': 14, 'B': 25, 'C': 45, 'D': 16, 'E': 45}
     for col, width in col_widths.items():
@@ -237,8 +240,8 @@ def generer_excel_formatted(selected_row):
     banner.alignment = Alignment(horizontal='center', vertical='center')
     ws.row_dimensions[1].height = 28
 
-    oui_c = sum(1 for col in selected_row.index if col.endswith("_Réponse") and str(selected_row[col]).strip() == "Oui")
-    non_c = sum(1 for col in selected_row.index if col.endswith("_Réponse") and str(selected_row[col]).strip() == "Non")
+    oui_c = sum(1 for col, val in data_dict.items() if str(col).endswith("_Réponse") and str(val).strip() == "Oui")
+    non_c = sum(1 for col, val in data_dict.items() if str(col).endswith("_Réponse") and str(val).strip() == "Non")
     tot_app = oui_c + non_c
     score_p = (oui_c / tot_app * 100) if tot_app > 0 else 0.0
 
@@ -246,19 +249,19 @@ def generer_excel_formatted(selected_row):
 
     ws['A3'] = "Entreprise :"
     ws['A3'].font = label_font
-    ws['B3'] = str(selected_row.get("Entreprise", "N/A"))
+    ws['B3'] = str(data_dict.get("Entreprise", "N/A"))
 
     ws['D3'] = "Date de l'audit :"
     ws['D3'].font = label_font
-    ws['E3'] = str(selected_row.get("Date", "N/A"))
+    ws['E3'] = str(data_dict.get("Date", "N/A"))
 
     ws['A4'] = "Site :"
     ws['A4'].font = label_font
-    ws['B4'] = str(selected_row.get("Site", "N/A"))
+    ws['B4'] = str(data_dict.get("Site", "N/A"))
 
     ws['D4'] = "Déclarant / Auditeur :"
     ws['D4'].font = label_font
-    ws['E4'] = str(selected_row.get("Déclarant", "N/A"))
+    ws['E4'] = str(data_dict.get("Déclarant", "N/A"))
 
     ws['A5'] = "Score de conformité :"
     ws['A5'].font = label_font
@@ -285,8 +288,8 @@ def generer_excel_formatted(selected_row):
 
     for row_idx, q in enumerate(QUESTIONS_DATA, start=8):
         q_id = q["id"]
-        reponse_val = str(selected_row.get(f"{q_id}_Réponse", "")).strip()
-        justif_val = str(selected_row.get(f"{q_id}_Justification", "")).strip()
+        reponse_val = str(data_dict.get(f"{q_id}_Réponse", "")).strip()
+        justif_val = str(data_dict.get(f"{q_id}_Justification", "")).strip()
 
         row_vals = [q_id, q["theme"], q["q"], reponse_val, justif_val]
         ws.row_dimensions[row_idx].height = 22
@@ -312,10 +315,9 @@ def generer_excel_formatted(selected_row):
     return buffer.getvalue()
 
 def charger_tous_les_audits():
-    """Récupère les audits depuis Google Sheets et/ou le stockage de la session."""
+    """Récupère les audits depuis Google Sheets et le stockage de la session."""
     audits_list = []
     
-    # 1. Chargement Google Sheets (sans cache)
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
         df_gsheet = conn.read(ttl=0)
@@ -325,7 +327,6 @@ def charger_tous_les_audits():
     except Exception:
         pass
         
-    # 2. Chargement des audits ajoutés dans la session en cours
     if "local_audits" in st.session_state and st.session_state["local_audits"]:
         for record in st.session_state["local_audits"]:
             if record not in audits_list:
@@ -459,23 +460,40 @@ if app_mode == "📝 Formulaire Prestataire":
         st.markdown(f"**Évaluation du score :** {get_color_badge(global_score_pct)}")
         st.progress(global_score_pct / 100.0)
 
+    # --- REPRISE DE BROUILLON DYNAMIQUE ---
     with st.expander("📂 Reprendre un brouillon enregistré auparavant (Optionnel)", expanded=False):
         uploaded_draft = st.file_uploader("Importez votre fichier de brouillon (.json) :", type=["json"], key="draft_importer")
-        draft_data = {}
         if uploaded_draft is not None:
             try:
                 draft_data = json.load(uploaded_draft)
-                st.success("✅ Brouillon chargé avec succès ! Vos réponses précédentes ont été appliquées.")
-            except Exception:
-                st.error("⚠️ Fichier de brouillon invalide.")
+                
+                if "Entreprise" in draft_data:
+                    st.session_state["company_name_key"] = draft_data["Entreprise"]
+                if "Déclarant" in draft_data:
+                    st.session_state["auditor_name_key"] = draft_data["Déclarant"]
+                if "Site" in draft_data:
+                    st.session_state["site_location_key"] = draft_data["Site"]
+
+                for q in QUESTIONS_DATA:
+                    q_id = q["id"]
+                    r_val = draft_data.get(f"{q_id}_Réponse")
+                    j_val = draft_data.get(f"{q_id}_Justification")
+                    if r_val in ["Oui", "Non", "N/A"]:
+                        st.session_state[f"status_{q_id}"] = r_val
+                    if j_val is not None:
+                        st.session_state[f"justif_{q_id}"] = j_val
+
+                st.success("✅ Brouillon chargé avec succès ! Toutes les réponses et justifications ont été réinjectées.")
+            except Exception as e:
+                st.error(f"⚠️ Fichier de brouillon invalide : {e}")
 
     st.subheader("1. Informations de l'Entreprise Extérieure")
     col1, col2 = st.columns(2)
     with col1:
-        company_name = st.text_input("Nom de l'entreprise *", value=draft_data.get("Entreprise", ""), placeholder="Ex: ABC Construction")
-        auditor_name = st.text_input("Nom du déclarant / Représentant HSE *", value=draft_data.get("Déclarant", ""), placeholder="Ex: Jean Dupont")
+        company_name = st.text_input("Nom de l'entreprise *", key="company_name_key", placeholder="Ex: ABC Construction")
+        auditor_name = st.text_input("Nom du déclarant / Représentant HSE *", key="auditor_name_key", placeholder="Ex: Jean Dupont")
     with col2:
-        site_location = st.text_input("Site / Chantier concerné *", value=draft_data.get("Site", ""), placeholder="Ex: Usine Amiens - Zone B")
+        site_location = st.text_input("Site / Chantier concerné *", key="site_location_key", placeholder="Ex: Usine Amiens - Zone B")
         audit_date = st.date_input("Date de soumission", value=datetime.today())
 
     st.markdown("---")
@@ -501,24 +519,19 @@ if app_mode == "📝 Formulaire Prestataire":
             
             if q["g"]:
                 st.markdown(f'<div class="guidance-box"><b>Attentes & Guidance :</b><br>{q["g"]}</div>', unsafe_allow_html=True)
-            
-            saved_status = draft_data.get(f"{q['id']}_Réponse", None)
-            saved_justif = draft_data.get(f"{q['id']}_Justification", "")
 
             c1, c2 = st.columns([1, 2])
             with c1:
-                status_index = ["Oui", "Non", "N/A"].index(saved_status) if saved_status in ["Oui", "Non", "N/A"] else None
                 status = st.radio(
                     f"Réponse pour [{q['id']}]",
                     options=["Oui", "Non", "N/A"],
-                    index=status_index,
+                    index=None,
                     horizontal=True,
                     key=f"status_{q['id']}"
                 )
             with c2:
                 justification = st.text_area(
                     f"Justification obligatoire pour [{q['id']}] *",
-                    value=saved_justif,
                     placeholder="Justification OBLIGATOIRE (procédure interne, preuve, précision ou plan d'action)...",
                     key=f"justif_{q['id']}",
                     height=90
@@ -586,21 +599,32 @@ if app_mode == "📝 Formulaire Prestataire":
                 else:
                     record[f"{q_id}_Fichier"] = ""
             
-            # 1. Sauvegarde systématique dans la session locale
             st.session_state["local_audits"].append(record)
             
-            # 2. Tentative de synchronisation vers Google Sheets
             try:
                 conn = st.connection("gsheets", type=GSheetsConnection)
                 existing_data = conn.read(ttl=0)
                 df_new = pd.DataFrame([record])
                 updated_df = pd.concat([existing_data, df_new], ignore_index=True)
                 conn.update(data=updated_df)
-                st.success("✅ Audit enregistré avec succès dans Google Sheets et dans la base locale !")
-            except Exception as e:
-                st.warning("⚠️ Impossible de synchroniser directement vers Google Sheets (Vérifiez vos clés API dans secrets.toml). L'audit a été enregistré dans l'espace Administrateur local.")
+                st.success("✅ Audit enregistré avec succès !")
+            except Exception:
+                st.warning("⚠️ Sauvegardé localement (Synchronisation Google Sheets non configurée).")
 
             st.balloons()
+            
+            # --- TÉLÉCHARGEMENT DU RAPPORT EXCEL MIS EN FORME POUR LE PRESTATAIRE ---
+            st.markdown("### 📥 Télécharger votre rapport d'audit")
+            excel_bytes_user = generer_excel_formatted(record)
+            nom_entreprise_clean = str(company_name).replace(" ", "_")
+            
+            st.download_button(
+                label="📥 TÉLÉCHARGER MON COMPTE-RENDU EXCEL MIS EN FORME (.XLSX)",
+                data=excel_bytes_user,
+                file_name=f"Audit_{nom_entreprise_clean}_{audit_date}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="primary"
+            )
 
     st.markdown("---")
     st.subheader("💾 Sauvegarder votre avancement")

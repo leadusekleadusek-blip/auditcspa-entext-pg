@@ -216,20 +216,15 @@ def get_color_badge(percentage):
     else:
         return f"🔴 **{percentage:.1f}% (Non conforme / Risque élevé)**"
 
-# ==========================================
-# FONCTION DE GÉNÉRATION DU FICHIER EXCEL STRUCTURÉ
-# ==========================================
 def generer_excel_formatted(selected_row):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Rapport Audit"
 
-    # Largeurs des colonnes
     col_widths = {'A': 14, 'B': 25, 'C': 45, 'D': 16, 'E': 45}
     for col, width in col_widths.items():
         ws.column_dimensions[col].width = width
 
-    # 1. Bandeau supérieur : Informations de l'Entreprise Extérieure
     ws.merge_cells('A1:E1')
     banner = ws['A1']
     banner.value = "INFORMATIONS DE L'ENTREPRISE EXTÉRIEURE"
@@ -238,13 +233,11 @@ def generer_excel_formatted(selected_row):
     banner.alignment = Alignment(horizontal='center', vertical='center')
     ws.row_dimensions[1].height = 28
 
-    # Calcul du score global pour les métadonnées
     oui_c = sum(1 for col in selected_row.index if col.endswith("_Réponse") and str(selected_row[col]).strip() == "Oui")
     non_c = sum(1 for col in selected_row.index if col.endswith("_Réponse") and str(selected_row[col]).strip() == "Non")
     tot_app = oui_c + non_c
     score_p = (oui_c / tot_app * 100) if tot_app > 0 else 0.0
 
-    # 2. Métadonnées du bloc Entreprise Extérieure
     label_font = Font(name='Calibri', bold=True, color="1F4E78")
 
     ws['A3'] = "Entreprise :"
@@ -267,7 +260,6 @@ def generer_excel_formatted(selected_row):
     ws['A5'].font = label_font
     ws['B5'] = f"{score_p:.1f}%"
 
-    # 3. En-têtes du tableau (Ligne 7)
     headers = ["N° question", "Thème", "Question", "Réponse", "Justification"]
     ws.row_dimensions[7].height = 24
 
@@ -287,7 +279,6 @@ def generer_excel_formatted(selected_row):
         cell.alignment = Alignment(horizontal='center', vertical='center')
         cell.border = thin_border
 
-    # 4. Lignes des questions
     for row_idx, q in enumerate(QUESTIONS_DATA, start=8):
         q_id = q["id"]
         reponse_val = str(selected_row.get(f"{q_id}_Réponse", "")).strip()
@@ -306,7 +297,6 @@ def generer_excel_formatted(selected_row):
                 wrap_text=True
             )
 
-            # Couleur conditionnelle pour la réponse
             if col_idx == 4:
                 if reponse_val in ["Oui", "Conforme"]:
                     cell.font = Font(name='Calibri', bold=True, color="16A34A")
@@ -318,75 +308,124 @@ def generer_excel_formatted(selected_row):
     return buffer.getvalue()
 
 # ==========================================
-# CALCUL DYNAMIQUE DU SCORE EN TEMPS RÉEL
+# SELECTION DU MODE DE NAVIGATION (SIDEBAR)
 # ==========================================
-total_q = len(QUESTIONS_DATA)
-answered_q_count = 0
-total_oui = 0
-total_non = 0
-total_na = 0
-
-theme_stats = {t: {"oui": 0, "non": 0, "na": 0, "answered": 0, "total": 0} for t in THEME_LIST}
-
-for q in QUESTIONS_DATA:
-    theme_stats[q["theme"]]["total"] += 1
-    q_key = f"status_{q['id']}"
-    if q_key in st.session_state and st.session_state[q_key] is not None:
-        answered_q_count += 1
-        val = st.session_state[q_key]
-        theme_stats[q["theme"]]["answered"] += 1
-        if val == "Oui":
-            total_oui += 1
-            theme_stats[q["theme"]]["oui"] += 1
-        elif val == "Non":
-            total_non += 1
-            theme_stats[q["theme"]]["non"] += 1
-        elif val == "N/A":
-            total_na += 1
-            theme_stats[q["theme"]]["na"] += 1
-
-total_applicable = total_oui + total_non
-global_score_pct = (total_oui / total_applicable * 100.0) if total_applicable > 0 else 0.0
-
-# ==========================================
-# PANNEAU LATÉRAL (SIDEBAR) - TOUJOURS VISIBLE
-# ==========================================
-st.sidebar.title("📊 Tableau de Bord HSE")
-
-st.sidebar.markdown("### 🏆 Score Global en Direct")
-st.sidebar.metric("Conformité Globale", f"{global_score_pct:.1f} %")
-st.sidebar.progress(global_score_pct / 100.0)
-st.sidebar.markdown(f"**Statut :** {get_color_badge(global_score_pct)}")
-
-progress_ratio = answered_q_count / total_q
-st.sidebar.markdown(f"**Remplissage :** {answered_q_count} / {total_q} questions ({int(progress_ratio*100)}%)")
-st.sidebar.progress(progress_ratio)
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 📌 Navigation & Scores par Thème")
-
-for idx, t_name in enumerate(THEME_LIST):
-    ts = theme_stats[t_name]
-    t_app = ts["oui"] + ts["non"]
-    t_score = (ts["oui"] / t_app * 100.0) if t_app > 0 else 0.0
-    
-    status_icon = "🟢" if t_score >= 80 else ("🟠" if t_score >= 50 else "🔴")
-    st.sidebar.markdown(f"**{status_icon} Thème {idx+1} : {t_score:.0f}%**")
-    st.sidebar.caption(f"*{t_name.split('. ')[1]}* — ({ts['answered']}/{ts['total']} questions renseignées)")
-
-selected_theme_nav = st.sidebar.radio(
-    "🎯 Afficher un thème spécifique :",
-    options=["📋 Tous les thèmes"] + THEME_LIST,
-    key="nav_theme_selection"
+st.sidebar.title("📌 Menu Navigation")
+app_mode = st.sidebar.radio(
+    "Choisir l'espace :",
+    options=["📝 Formulaire Prestataire", "🔒 Espace Administrateur HSE"],
+    key="navigation_mode"
 )
-
-# Navigation principale par onglets
-tab_form, tab_admin = st.tabs(["📝 Formulaire Prestataire", "🔒 Espace Administrateur HSE"])
+st.sidebar.markdown("---")
 
 # ==========================================
-# ONGLET 1 : FORMULAIRE PRESTATAIRE
+# PANNEAU LATÉRAL DYNAMIQUE SELON LE MODE
 # ==========================================
-with tab_form:
+if app_mode == "📝 Formulaire Prestataire":
+    # --- SIDEBAR PRESTATAIRE ---
+    total_q = len(QUESTIONS_DATA)
+    answered_q_count = 0
+    total_oui = 0
+    total_non = 0
+    total_na = 0
+
+    theme_stats = {t: {"oui": 0, "non": 0, "na": 0, "answered": 0, "total": 0} for t in THEME_LIST}
+
+    for q in QUESTIONS_DATA:
+        theme_stats[q["theme"]]["total"] += 1
+        q_key = f"status_{q['id']}"
+        if q_key in st.session_state and st.session_state[q_key] is not None:
+            answered_q_count += 1
+            val = st.session_state[q_key]
+            theme_stats[q["theme"]]["answered"] += 1
+            if val == "Oui":
+                total_oui += 1
+                theme_stats[q["theme"]]["oui"] += 1
+            elif val == "Non":
+                total_non += 1
+                theme_stats[q["theme"]]["non"] += 1
+            elif val == "N/A":
+                total_na += 1
+                theme_stats[q["theme"]]["na"] += 1
+
+    total_applicable = total_oui + total_non
+    global_score_pct = (total_oui / total_applicable * 100.0) if total_applicable > 0 else 0.0
+
+    st.sidebar.markdown("### 🏆 Score Global en Direct")
+    st.sidebar.metric("Conformité Globale", f"{global_score_pct:.1f} %")
+    st.sidebar.progress(global_score_pct / 100.0)
+    st.sidebar.markdown(f"**Statut :** {get_color_badge(global_score_pct)}")
+
+    progress_ratio = answered_q_count / total_q
+    st.sidebar.markdown(f"**Remplissage :** {answered_q_count} / {total_q} questions ({int(progress_ratio*100)}%)")
+    st.sidebar.progress(progress_ratio)
+
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 📌 Navigation par Thème")
+
+    for idx, t_name in enumerate(THEME_LIST):
+        ts = theme_stats[t_name]
+        t_app = ts["oui"] + ts["non"]
+        t_score = (ts["oui"] / t_app * 100.0) if t_app > 0 else 0.0
+        
+        status_icon = "🟢" if t_score >= 80 else ("🟠" if t_score >= 50 else "🔴")
+        st.sidebar.markdown(f"**{status_icon} Thème {idx+1} : {t_score:.0f}%**")
+        st.sidebar.caption(f"*{t_name.split('. ')[1]}* — ({ts['answered']}/{ts['total']} renseig.)")
+
+    selected_theme_nav = st.sidebar.radio(
+        "🎯 Afficher un thème spécifique :",
+        options=["📋 Tous les thèmes"] + THEME_LIST,
+        key="nav_theme_selection"
+    )
+
+else:
+    # --- SIDEBAR ADMINISTRATEUR ---
+    st.sidebar.markdown("### 📊 Indicateurs Administrateur")
+    
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        df_admin_side = conn.read().dropna(how="all")
+    except Exception:
+        df_admin_side = pd.DataFrame()
+
+    if not df_admin_side.empty:
+        total_audits_count = len(df_admin_side)
+        scores_list = []
+        
+        for _, row in df_admin_side.iterrows():
+            o_c = sum(1 for c in row.index if c.endswith("_Réponse") and str(row[c]).strip() == "Oui")
+            n_c = sum(1 for c in row.index if c.endswith("_Réponse") and str(row[c]).strip() == "Non")
+            t_app = o_c + n_c
+            if t_app > 0:
+                scores_list.append((o_c / t_app) * 100)
+
+        avg_score_val = (sum(scores_list) / len(scores_list)) if scores_list else 0.0
+        
+        st.sidebar.metric("Total d'audits reçus", total_audits_count)
+        st.sidebar.metric("Moyenne de conformité", f"{avg_score_val:.1f} %")
+        st.sidebar.markdown("---")
+        
+        st.sidebar.markdown("### 📂 Choix de l'Audit")
+        admin_options_sidebar = []
+        for idx, row in df_admin_side.iterrows():
+            ent = row.get("Entreprise", "Inconnu")
+            dt = row.get("Date", "N/A")
+            st_name = row.get("Site", "N/A")
+            admin_options_sidebar.append(f"{ent} — {dt} ({st_name})")
+            
+        selected_admin_sidebar_idx = st.sidebar.selectbox(
+            "Sélectionner un audit à consulter :",
+            range(len(admin_options_sidebar)),
+            format_func=lambda x: admin_options_sidebar[x],
+            key="sidebar_admin_audit_select"
+        )
+    else:
+        st.sidebar.info("Aucun audit disponible dans la base.")
+
+# ==========================================
+# PAGE PRINCIPALE : FORMULAIRE PRESTATAIRE
+# ==========================================
+if app_mode == "📝 Formulaire Prestataire":
     st.markdown("""<div class="main-header">🛡️ Formulaire d'Audit Sécurité & HSE</div>""", unsafe_allow_html=True)
     st.markdown("""<div class="sub-header">Évaluation de conformité pour les entreprises extérieures. Merci de répondre à chaque question et de fournir obligatoirement une justification.</div>""", unsafe_allow_html=True)
 
@@ -564,16 +603,16 @@ with tab_form:
     )
 
 # ==========================================
-# ONGLET 2 : ESPACE ADMINISTRATEUR HSE
+# PAGE PRINCIPALE : ESPACE ADMINISTRATEUR HSE
 # ==========================================
-with tab_admin:
+else:
     st.markdown("""<div class="main-header">🔒 Espace d'Administration HSE</div>""", unsafe_allow_html=True)
     
     ADMIN_PASSWORD = st.secrets.get("admin_password", "HSE2026Securite!")
     input_pwd = st.text_input("🔑 Saisissez le mot de passe Administrateur :", type="password")
     
     if input_pwd == "":
-        st.info("🔒 Cet espace est strictly réservé à la consultation administrateur.")
+        st.info("🔒 Cet espace est strictement réservé à la consultation administrateur.")
     elif input_pwd != ADMIN_PASSWORD:
         st.error("❌ Mot de passe incorrect.")
     else:
@@ -593,19 +632,10 @@ with tab_admin:
         if df_audits.empty:
             st.info("Aucun audit n'a encore été enregistré dans la base.")
         else:
-            audit_options = []
-            for idx, row in df_audits.iterrows():
-                ent = row.get("Entreprise", "Inconnu")
-                dt = row.get("Date", "N/A")
-                st_name = row.get("Site", "N/A")
-                audit_options.append(f"{ent} — {dt} (Site: {st_name})")
-            
-            selected_idx = st.selectbox(
-                "📋 Sélectionnez un audit validé pour afficher l'ensemble des détails :",
-                range(len(audit_options)),
-                format_func=lambda x: audit_options[x]
-            )
-            
+            selected_idx = st.session_state.get("sidebar_admin_audit_select", 0)
+            if selected_idx >= len(df_audits):
+                selected_idx = 0
+                
             selected_row = df_audits.iloc[selected_idx]
             
             st.markdown("---")
@@ -617,7 +647,6 @@ with tab_admin:
             c3.metric("📍 Site", str(selected_row.get("Site", "N/A")))
             c4.metric("📅 Date", str(selected_row.get("Date", "N/A")))
             
-            # Calcul des totaux et du score global
             oui_count = sum(1 for col in selected_row.index if col.endswith("_Réponse") and str(selected_row[col]).strip() == "Oui")
             non_count = sum(1 for col in selected_row.index if col.endswith("_Réponse") and str(selected_row[col]).strip() == "Non")
             na_count = sum(1 for col in selected_row.index if col.endswith("_Réponse") and str(selected_row[col]).strip() == "N/A")
@@ -635,9 +664,7 @@ with tab_admin:
             st.markdown(f"**Évaluation du score total :** {get_color_badge(score_percentage_admin)}")
             st.progress(score_percentage_admin / 100.0)
             
-            # ==========================================
-            # BOUTON EXPORT EXCEL MIS EN FORME
-            # ==========================================
+            # Export Excel
             st.markdown(" ")
             excel_bytes = generer_excel_formatted(selected_row)
             nom_entreprise_clean = str(selected_row.get("Entreprise", "Audit")).replace(" ", "_")

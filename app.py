@@ -1,5 +1,6 @@
 import json
 import io
+import os
 from datetime import datetime
 import streamlit as st
 import pandas as pd
@@ -26,7 +27,10 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Initialisation de la base locale dans la session
+# Nom du fichier de base de données locale sur disque
+DB_FILE = "audits_db.json"
+
+# Initialisation de la base dans la session
 if "local_audits" not in st.session_state:
     st.session_state["local_audits"] = []
 
@@ -173,6 +177,19 @@ THEME_LIST = [
     "5. Formations & Habilitations Sécurité"
 ]
 
+def enregistrer_audit_fichier_local(record):
+    """Sauvegarde permanente dans un fichier JSON sur le disque."""
+    audits = []
+    if os.path.exists(DB_FILE):
+        try:
+            with open(DB_FILE, "r", encoding="utf-8") as f:
+                audits = json.load(f)
+        except Exception:
+            audits = []
+    audits.append(record)
+    with open(DB_FILE, "w", encoding="utf-8") as f:
+        json.dump(audits, f, ensure_ascii=False, indent=2)
+
 def upload_file_to_drive(uploaded_file, company_name, q_id):
     if not DRIVE_LIB_AVAILABLE:
         return f"Fichier joint : {uploaded_file.name}"
@@ -316,15 +333,27 @@ def generer_excel_formatted(selected_data):
 def charger_tous_les_audits():
     audits_list = []
     
+    # 1. Chargement depuis le fichier JSON permanent sur le disque
+    if os.path.exists(DB_FILE):
+        try:
+            with open(DB_FILE, "r", encoding="utf-8") as f:
+                audits_list = json.load(f)
+        except Exception:
+            audits_list = []
+            
+    # 2. Chargement complémentaire Google Sheets (si configuré)
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
         df_gsheet = conn.read(ttl=0)
         df_gsheet = df_gsheet.dropna(how="all")
         if not df_gsheet.empty:
-            audits_list.extend(df_gsheet.to_dict(orient="records"))
+            for rec in df_gsheet.to_dict(orient="records"):
+                if rec not in audits_list:
+                    audits_list.append(rec)
     except Exception:
         pass
         
+    # 3. Chargement depuis la session active
     if "local_audits" in st.session_state and st.session_state["local_audits"]:
         for record in st.session_state["local_audits"]:
             if record not in audits_list:
@@ -597,17 +626,20 @@ if app_mode == "📝 Formulaire Prestataire":
                 else:
                     record[f"{q_id}_Fichier"] = ""
             
+            # 1. Sauvegarde permanente sur le disque
+            enregistrer_audit_fichier_local(record)
             st.session_state["local_audits"].append(record)
             
+            # 2. Synchronisation Google Sheets si configurée
             try:
                 conn = st.connection("gsheets", type=GSheetsConnection)
                 existing_data = conn.read(ttl=0)
                 df_new = pd.DataFrame([record])
                 updated_df = pd.concat([existing_data, df_new], ignore_index=True)
                 conn.update(data=updated_df)
-                st.success("✅ Audit enregistré avec succès !")
+                st.success("✅ Audit enregistré avec succès dans la base permanente et Google Sheets !")
             except Exception:
-                st.warning("⚠️ Sauvegardé localement (Synchronisation Google Sheets non configurée).")
+                st.success("✅ Audit enregistré avec succès dans la base de données permanente (`audits_db.json`) !")
 
             st.balloons()
             
@@ -696,7 +728,7 @@ else:
             df_recap = pd.DataFrame(recap_data)
             st.dataframe(df_recap, use_container_width=True, hide_index=True)
 
-            # --- SELECTION DE LA FICHE DETAIL---
+            # --- SELECTION DE LA FICHE DETAIL ---
             selected_idx = st.session_state.get("sidebar_admin_audit_select", 0)
             if selected_idx >= len(df_audits):
                 selected_idx = 0

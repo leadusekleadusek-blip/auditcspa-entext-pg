@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import json
 from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
 
@@ -10,7 +11,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Style CSS sur mesure
+# Style CSS sur mesure (y compris le bouton XXL avec contour bleu)
 st.markdown("""
     <style>
     .main-header { font-size: 26px; font-weight: bold; color: #1E3A8A; margin-bottom: 5px; }
@@ -26,6 +27,27 @@ st.markdown("""
         margin-bottom: 12px; 
     }
     .question-title { font-size: 16px; font-weight: 600; color: #1F2937; margin-top: 10px; }
+    
+    /* Style du bouton Valider et envoyer (Grand, voyant, contour bleu) */
+    .stFormSubmitButton > button {
+        width: 100% !important;
+        font-size: 22px !important;
+        font-weight: bold !important;
+        padding: 18px 30px !important;
+        background-color: #1E3A8A !important;
+        color: #FFFFFF !important;
+        border: 4px solid #3B82F6 !important;
+        border-radius: 12px !important;
+        box-shadow: 0px 4px 12px rgba(30, 58, 138, 0.3) !important;
+        cursor: pointer !important;
+        transition: all 0.3s ease !important;
+    }
+    .stFormSubmitButton > button:hover {
+        background-color: #2563EB !important;
+        border-color: #60A5FA !important;
+        color: #FFFFFF !important;
+        transform: scale(1.01) !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -115,15 +137,26 @@ QUESTIONS_DATA = [
     {"id": "5.5", "cat": "5. Safety Training Systems", "q": "Refresher Training", "g": "Ensure system in place to keep training up to date and refreshed at required interval"}
 ]
 
-# Formulaire d'en-tête (Informations Générales)
+# Option : Reprendre un brouillon enregistre
+with st.expander("📂 Reprendre un brouillon enregistré auparavant (Optionnel)", expanded=False):
+    uploaded_file = st.file_uploader("Si vous avez téléchargé un fichier de brouillon (.json), importez-le ici :", type=["json"])
+    draft_data = {}
+    if uploaded_file is not None:
+        try:
+            draft_data = json.load(uploaded_file)
+            st.success("✅ Brouillon chargé avec succès ! Vos réponses précédentes ont été appliquées.")
+        except Exception as e:
+            st.error("⚠️ Fichier de brouillon invalide.")
+
+# Formulaire d'en-tête
 with st.form(key="audit_form"):
     st.subheader("1. Informations de l'Entreprise Extérieure")
     col1, col2 = st.columns(2)
     with col1:
-        company_name = st.text_input("Nom de l'entreprise *", placeholder="Ex: ABC Construction")
-        auditor_name = st.text_input("Nom du déclarant / Représentant HSE *", placeholder="Ex: Jean Dupont")
+        company_name = st.text_input("Nom de l'entreprise *", value=draft_data.get("Entreprise", ""), placeholder="Ex: ABC Construction")
+        auditor_name = st.text_input("Nom du déclarant / Représentant HSE *", value=draft_data.get("Déclarant", ""), placeholder="Ex: Jean Dupont")
     with col2:
-        site_location = st.text_input("Site / Chantier concerné *", placeholder="Ex: Usine Amiens - Zone B")
+        site_location = st.text_input("Site / Chantier concerné *", value=draft_data.get("Site", ""), placeholder="Ex: Usine Amiens - Zone B")
         audit_date = st.date_input("Date de soumission", value=datetime.today())
 
     st.markdown("---")
@@ -141,18 +174,24 @@ with st.form(key="audit_form"):
             if q["g"]:
                 st.markdown(f'<div class="guidance-box"><b>Attentes & Guidance :</b><br>{q["g"]}</div>', unsafe_allow_html=True)
             
+            # Application de "N/A" par défaut (index=2) ou de la valeur du brouillon
+            saved_status = draft_data.get(f"{q['id']}_Réponse", "N/A")
+            status_index = ["Oui", "Non", "N/A"].index(saved_status) if saved_status in ["Oui", "Non", "N/A"] else 2
+            saved_justif = draft_data.get(f"{q['id']}_Justification", "")
+
             c1, c2 = st.columns([1, 2])
             with c1:
                 status = st.radio(
                     f"Réponse {q['id']}",
                     options=["Oui", "Non", "N/A"],
-                    index=0,
+                    index=status_index,  # N/A coché par défaut
                     horizontal=True,
                     key=f"status_{q['id']}"
                 )
             with c2:
                 justification = st.text_area(
                     f"Justification {q['id']}",
+                    value=saved_justif,
                     placeholder="Justifiez votre réponse (procédure interne, preuve, plan d'action si Non/NA)...",
                     key=f"justif_{q['id']}",
                     height=80
@@ -164,7 +203,7 @@ with st.form(key="audit_form"):
             }
             st.markdown("<hr style='margin: 15px 0; border-top: 1px dashed #E5E7EB;'>", unsafe_allow_html=True)
 
-    submit_button = st.form_submit_button(label="🚀 Valider et envoyer l'audit")
+    submit_button = st.form_submit_button(label="🚀 VALIDER ET ENVOYER L'AUDIT")
 
 # Traitement de la soumission
 if submit_button:
@@ -209,3 +248,25 @@ if submit_button:
                 file_name=f"Audit_{company_name}_{audit_date}.csv",
                 mime="text/csv"
             )
+
+# Option de sauvegarde de brouillon
+st.markdown("---")
+st.subheader("💾 Vous n'avez pas fini ? Sauvegarder votre avancement")
+st.caption("Vous pouvez télécharger un fichier de brouillon pour reprendre la saisie plus tard là où vous vous étiez arrêté.")
+
+draft_export = {
+    "Entreprise": company_name if 'company_name' in locals() else "",
+    "Déclarant": auditor_name if 'auditor_name' in locals() else "",
+    "Site": site_location if 'site_location' in locals() else "",
+}
+if 'responses' in locals():
+    for q_id, res in responses.items():
+        draft_export[f"{q_id}_Réponse"] = res["status"]
+        draft_export[f"{q_id}_Justification"] = res["justification"]
+
+st.download_button(
+    label="💾 Télécharger le fichier de brouillon (.json)",
+    data=json.dumps(draft_export, ensure_ascii=False, indent=2),
+    file_name=f"Brouillon_Audit_{company_name if 'company_name' in locals() and company_name else 'Incomplet'}.json",
+    mime="application/json"
+)

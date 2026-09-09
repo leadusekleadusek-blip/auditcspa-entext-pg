@@ -26,6 +26,10 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Initialisation d'une base locale permanente dans la session
+if "local_audits" not in st.session_state:
+    st.session_state["local_audits"] = []
+
 # Style CSS sur mesure
 st.markdown("""
     <style>
@@ -307,6 +311,30 @@ def generer_excel_formatted(selected_row):
     wb.save(buffer)
     return buffer.getvalue()
 
+def charger_tous_les_audits():
+    """Récupère les audits depuis Google Sheets et/ou le stockage de la session."""
+    audits_list = []
+    
+    # 1. Chargement Google Sheets (sans cache)
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        df_gsheet = conn.read(ttl=0)
+        df_gsheet = df_gsheet.dropna(how="all")
+        if not df_gsheet.empty:
+            audits_list.extend(df_gsheet.to_dict(orient="records"))
+    except Exception:
+        pass
+        
+    # 2. Chargement des audits ajoutés dans la session en cours
+    if "local_audits" in st.session_state and st.session_state["local_audits"]:
+        for record in st.session_state["local_audits"]:
+            if record not in audits_list:
+                audits_list.append(record)
+
+    if audits_list:
+        return pd.DataFrame(audits_list)
+    return pd.DataFrame()
+
 # ==========================================
 # SELECTION DU MODE DE NAVIGATION (SIDEBAR)
 # ==========================================
@@ -322,7 +350,6 @@ st.sidebar.markdown("---")
 # PANNEAU LATÉRAL DYNAMIQUE SELON LE MODE
 # ==========================================
 if app_mode == "📝 Formulaire Prestataire":
-    # --- SIDEBAR PRESTATAIRE ---
     total_q = len(QUESTIONS_DATA)
     answered_q_count = 0
     total_oui = 0
@@ -379,14 +406,8 @@ if app_mode == "📝 Formulaire Prestataire":
     )
 
 else:
-    # --- SIDEBAR ADMINISTRATEUR ---
     st.sidebar.markdown("### 📊 Indicateurs Administrateur")
-    
-    try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        df_admin_side = conn.read().dropna(how="all")
-    except Exception:
-        df_admin_side = pd.DataFrame()
+    df_admin_side = charger_tous_les_audits()
 
     if not df_admin_side.empty:
         total_audits_count = len(df_admin_side)
@@ -565,23 +586,21 @@ if app_mode == "📝 Formulaire Prestataire":
                 else:
                     record[f"{q_id}_Fichier"] = ""
             
+            # 1. Sauvegarde systématique dans la session locale
+            st.session_state["local_audits"].append(record)
+            
+            # 2. Tentative de synchronisation vers Google Sheets
             try:
                 conn = st.connection("gsheets", type=GSheetsConnection)
-                existing_data = conn.read()
+                existing_data = conn.read(ttl=0)
                 df_new = pd.DataFrame([record])
                 updated_df = pd.concat([existing_data, df_new], ignore_index=True)
                 conn.update(data=updated_df)
-                
-                st.success("✅ Audit enregistré avec succès dans la base centrale !")
-                st.balloons()
-            except Exception:
-                st.success("✅ Vos réponses ont été enregistrées localement.")
-                st.download_button(
-                    label="📥 Télécharger votre copie d'audit (CSV)",
-                    data=pd.DataFrame([record]).to_csv(index=False).encode('utf-8'),
-                    file_name=f"Audit_{company_name}_{audit_date}.csv",
-                    mime="text/csv"
-                )
+                st.success("✅ Audit enregistré avec succès dans Google Sheets et dans la base locale !")
+            except Exception as e:
+                st.warning("⚠️ Impossible de synchroniser directement vers Google Sheets (Vérifiez vos clés API dans secrets.toml). L'audit a été enregistré dans l'espace Administrateur local.")
+
+            st.balloons()
 
     st.markdown("---")
     st.subheader("💾 Sauvegarder votre avancement")
@@ -622,12 +641,7 @@ else:
         if st.button("🔄 Actualiser la liste des audits"):
             st.cache_data.clear()
 
-        try:
-            conn = st.connection("gsheets", type=GSheetsConnection)
-            df_audits = conn.read()
-            df_audits = df_audits.dropna(how="all")
-        except Exception:
-            df_audits = pd.DataFrame()
+        df_audits = charger_tous_les_audits()
 
         if df_audits.empty:
             st.info("Aucun audit n'a encore été enregistré dans la base.")

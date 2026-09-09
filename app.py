@@ -21,11 +21,11 @@ st.set_page_config(
     layout="wide"
 )
 
-# Style CSS sur mesure (y compris le bouton XXL avec contour bleu)
+# Style CSS sur mesure
 st.markdown("""
     <style>
     .main-header { font-size: 26px; font-weight: bold; color: #1E3A8A; margin-bottom: 5px; }
-    .sub-header { font-size: 15px; color: #4B5563; margin-bottom: 25px; }
+    .sub-header { font-size: 15px; color: #4B5563; margin-bottom: 20px; }
     .guidance-box { 
         background-color: #F0F9FF; 
         border-left: 4px solid #0284C7; 
@@ -38,7 +38,6 @@ st.markdown("""
     }
     .question-title { font-size: 16px; font-weight: 600; color: #1F2937; margin-top: 10px; }
     
-    /* Style du bouton Valider et envoyer (Grand, voyant, contour bleu) */
     .stFormSubmitButton > button {
         width: 100% !important;
         font-size: 22px !important;
@@ -50,59 +49,14 @@ st.markdown("""
         border-radius: 12px !important;
         box-shadow: 0px 4px 12px rgba(30, 58, 138, 0.3) !important;
         cursor: pointer !important;
-        transition: all 0.3s ease !important;
     }
     .stFormSubmitButton > button:hover {
         background-color: #2563EB !important;
         border-color: #60A5FA !important;
         color: #FFFFFF !important;
-        transform: scale(1.01) !important;
     }
     </style>
 """, unsafe_allow_html=True)
-
-st.markdown("""<div class="main-header">🛡️ Formulaire d'Audit Sécurité & HSE</div>""", unsafe_allow_html=True)
-st.markdown("""<div class="sub-header">Évaluation de conformité pour les entreprises extérieures. Merci de répondre à chaque question, de fournir les justifications et de joindre vos documents si nécessaire.</div>""", unsafe_allow_html=True)
-
-# Fonction d'envoi de fichier vers Google Drive
-def upload_file_to_drive(uploaded_file, company_name, q_id):
-    if not DRIVE_LIB_AVAILABLE:
-        return f"Fichier joint : {uploaded_file.name} (Bibliothèque Drive non installée)"
-    
-    try:
-        creds_info = None
-        if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
-            creds_info = dict(st.secrets["connections"]["gsheets"])
-        elif "gcp_service_account" in st.secrets:
-            creds_info = dict(st.secrets["gcp_service_account"])
-            
-        if not creds_info:
-            return f"Fichier joint : {uploaded_file.name} (Service Account non configuré)"
-
-        creds = service_account.Credentials.from_service_account_info(
-            creds_info,
-            scopes=['https://www.googleapis.com/auth/drive.file']
-        )
-        service = build('drive', 'v3', credentials=creds)
-
-        file_metadata = {
-            'name': f"{company_name}_{q_id}_{uploaded_file.name}"
-        }
-        
-        if "drive_folder_id" in st.secrets:
-            file_metadata['parents'] = [st.secrets["drive_folder_id"]]
-
-        media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getvalue()), mimetype=uploaded_file.type)
-        file_res = service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
-        
-        service.permissions().create(
-            fileId=file_res.get('id'),
-            body={'type': 'anyone', 'role': 'reader'}
-        ).execute()
-
-        return file_res.get('webViewLink')
-    except Exception as e:
-        return f"Fichier joint : {uploaded_file.name} (Info : {str(e)})"
 
 # Base complète des 54 questions
 QUESTIONS_DATA = [
@@ -187,158 +141,295 @@ QUESTIONS_DATA = [
     {"id": "5.5", "cat": "5. Safety Training Systems", "q": "Refresher Training", "g": "Ensure system in place to keep training up to date and refreshed at required interval"}
 ]
 
-# Option : Reprendre un brouillon enregistre
-with st.expander("📂 Reprendre un brouillon enregistré auparavant (Optionnel)", expanded=False):
-    uploaded_draft = st.file_uploader("Si vous avez téléchargé un fichier de brouillon (.json), importez-le ici :", type=["json"], key="draft_importer")
-    draft_data = {}
-    if uploaded_draft is not None:
-        try:
-            draft_data = json.load(uploaded_draft)
-            st.success("✅ Brouillon chargé avec succès ! Vos réponses précédentes ont été appliquées.")
-        except Exception as e:
-            st.error("⚠️ Fichier de brouillon invalide.")
-
-# Formulaire d'en-tête
-with st.form(key="audit_form"):
-    st.subheader("1. Informations de l'Entreprise Extérieure")
-    col1, col2 = st.columns(2)
-    with col1:
-        company_name = st.text_input("Nom de l'entreprise *", value=draft_data.get("Entreprise", ""), placeholder="Ex: ABC Construction")
-        auditor_name = st.text_input("Nom du déclarant / Représentant HSE *", value=draft_data.get("Déclarant", ""), placeholder="Ex: Jean Dupont")
-    with col2:
-        site_location = st.text_input("Site / Chantier concerné *", value=draft_data.get("Site", ""), placeholder="Ex: Usine Amiens - Zone B")
-        audit_date = st.date_input("Date de soumission", value=datetime.today())
-
-    st.markdown("---")
-    st.subheader("2. Grille d'Évaluation des Exigences Sécurité")
-
-    categories = sorted(list(set(q["cat"] for q in QUESTIONS_DATA)))
-    responses = {}
-    uploaded_files_dict = {}
+def upload_file_to_drive(uploaded_file, company_name, q_id):
+    if not DRIVE_LIB_AVAILABLE:
+        return f"Fichier joint : {uploaded_file.name}"
     
-    for cat in categories:
-        st.markdown(f"### 📌 {cat}")
-        cat_questions = [q for q in QUESTIONS_DATA if q["cat"] == cat]
-        
-        for q in cat_questions:
-            st.markdown(f'<div class="question-title">[{q["id"]}] {q["q"]}</div>', unsafe_allow_html=True)
-            if q["g"]:
-                st.markdown(f'<div class="guidance-box"><b>Attentes & Guidance :</b><br>{q["g"]}</div>', unsafe_allow_html=True)
+    try:
+        creds_info = None
+        if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
+            creds_info = dict(st.secrets["connections"]["gsheets"])
+        elif "gcp_service_account" in st.secrets:
+            creds_info = dict(st.secrets["gcp_service_account"])
             
-            # Application de "N/A" par défaut (index=2) ou de la valeur du brouillon
-            saved_status = draft_data.get(f"{q['id']}_Réponse", "N/A")
-            status_index = ["Oui", "Non", "N/A"].index(saved_status) if saved_status in ["Oui", "Non", "N/A"] else 2
-            saved_justif = draft_data.get(f"{q['id']}_Justification", "")
+        if not creds_info:
+            return f"Fichier joint : {uploaded_file.name}"
 
-            c1, c2 = st.columns([1, 2])
-            with c1:
-                status = st.radio(
-                    f"Réponse {q['id']}",
-                    options=["Oui", "Non", "N/A"],
-                    index=status_index,  # N/A coché par défaut
-                    horizontal=True,
-                    key=f"status_{q['id']}"
-                )
-            with c2:
-                justification = st.text_area(
-                    f"Justification {q['id']}",
-                    value=saved_justif,
-                    placeholder="Justifiez votre réponse (procédure interne, preuve, plan d'action si Non/NA)...",
-                    key=f"justif_{q['id']}",
-                    height=80
-                )
-            
-            # Champ pour joindre une pièce justificative spécifique
-            file_attached = st.file_uploader(
-                f"📎 Pièce justificative pour [{q['id']}] (Optionnel - PDF, Image, Excel, Word)",
-                type=["pdf", "png", "jpg", "jpeg", "docx", "xlsx"],
-                key=f"file_{q['id']}"
-            )
-            
-            responses[q['id']] = {
-                "status": status,
-                "justification": justification
-            }
-            if file_attached is not None:
-                uploaded_files_dict[q['id']] = file_attached
-                
-            st.markdown("<hr style='margin: 15px 0; border-top: 1px dashed #E5E7EB;'>", unsafe_allow_html=True)
+        creds = service_account.Credentials.from_service_account_info(
+            creds_info,
+            scopes=['https://www.googleapis.com/auth/drive.file']
+        )
+        service = build('drive', 'v3', credentials=creds)
 
-    submit_button = st.form_submit_button(label="🚀 VALIDER ET ENVOYER L'AUDIT")
-
-# Traitement de la soumission
-if submit_button:
-    missing_fields = []
-    if not company_name: missing_fields.append("Nom de l'entreprise")
-    if not auditor_name: missing_fields.append("Nom du déclarant")
-    if not site_location: missing_fields.append("Site / Chantier")
-    
-    # Contrôle des justifications manquantes pour Non / N/A
-    unjustified = [q_id for q_id, res in responses.items() if res["status"] in ["Non", "N/A"] and not res["justification"].strip()]
-            
-    if missing_fields:
-        st.error(f"⚠️ Veuillez remplir les informations obligatoires : {', '.join(missing_fields)}.")
-    elif unjustified:
-        st.warning(f"⚠️ Une justification est requise pour toute réponse 'Non' ou 'N/A'. Question(s) concernée(s) : {', '.join(unjustified)}")
-    else:
-        st.info("⏳ Enregistrement de l'audit en cours...")
-        
-        record = {
-            "Date": str(audit_date),
-            "Entreprise": company_name,
-            "Déclarant": auditor_name,
-            "Site": site_location,
+        file_metadata = {
+            'name': f"{company_name}_{q_id}_{uploaded_file.name}"
         }
         
-        # Traitement des questions et fichiers
-        for q_id, res in responses.items():
-            record[f"{q_id}_Réponse"] = res["status"]
-            record[f"{q_id}_Justification"] = res["justification"]
-            
-            # Traitement de la pièce jointe
-            if q_id in uploaded_files_dict:
-                file_obj = uploaded_files_dict[q_id]
-                drive_link_or_name = upload_file_to_drive(file_obj, company_name, q_id)
-                record[f"{q_id}_Fichier"] = drive_link_or_name
-            else:
-                record[f"{q_id}_Fichier"] = ""
+        if "drive_folder_id" in st.secrets:
+            file_metadata['parents'] = [st.secrets["drive_folder_id"]]
+
+        media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getvalue()), mimetype=uploaded_file.type)
+        file_res = service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
         
-        try:
-            conn = st.connection("gsheets", type=GSheetsConnection)
-            existing_data = conn.read()
-            df_new = pd.DataFrame([record])
-            updated_df = pd.concat([existing_data, df_new], ignore_index=True)
-            conn.update(data=updated_df)
+        service.permissions().create(
+            fileId=file_res.get('id'),
+            body={'type': 'anyone', 'role': 'reader'}
+        ).execute()
+
+        return file_res.get('webViewLink')
+    except Exception as e:
+        return f"Fichier joint : {uploaded_file.name}"
+
+# Navigation principale par onglets
+tab_form, tab_admin = st.tabs(["📝 Formulaire Prestataire", "🔒 Espace Administrateur HSE"])
+
+# ==========================================
+# ONGLET 1 : FORMULAIRE PRESTATAIRE
+# ==========================================
+with tab_form:
+    st.markdown("""<div class="main-header">🛡️ Formulaire d'Audit Sécurité & HSE</div>""", unsafe_allow_html=True)
+    st.markdown("""<div class="sub-header">Évaluation de conformité pour les entreprises extérieures. Merci de répondre à chaque question et de fournir les justifications nécessaires.</div>""", unsafe_allow_html=True)
+
+    with st.expander("📂 Reprendre un brouillon enregistré auparavant (Optionnel)", expanded=False):
+        uploaded_draft = st.file_uploader("Importez votre fichier de brouillon (.json) :", type=["json"], key="draft_importer")
+        draft_data = {}
+        if uploaded_draft is not None:
+            try:
+                draft_data = json.load(uploaded_draft)
+                st.success("✅ Brouillon chargé avec succès ! Vos réponses précédentes ont été appliquées.")
+            except Exception:
+                st.error("⚠️ Fichier de brouillon invalide.")
+
+    with st.form(key="audit_form"):
+        st.subheader("1. Informations de l'Entreprise Extérieure")
+        col1, col2 = st.columns(2)
+        with col1:
+            company_name = st.text_input("Nom de l'entreprise *", value=draft_data.get("Entreprise", ""), placeholder="Ex: ABC Construction")
+            auditor_name = st.text_input("Nom du déclarant / Représentant HSE *", value=draft_data.get("Déclarant", ""), placeholder="Ex: Jean Dupont")
+        with col2:
+            site_location = st.text_input("Site / Chantier concerné *", value=draft_data.get("Site", ""), placeholder="Ex: Usine Amiens - Zone B")
+            audit_date = st.date_input("Date de soumission", value=datetime.today())
+
+        st.markdown("---")
+        st.subheader("2. Grille d'Évaluation des Exigences Sécurité")
+
+        categories = sorted(list(set(q["cat"] for q in QUESTIONS_DATA)))
+        responses = {}
+        uploaded_files_dict = {}
+        
+        for cat in categories:
+            st.markdown(f"### 📌 {cat}")
+            cat_questions = [q for q in QUESTIONS_DATA if q["cat"] == cat]
             
-            st.success("✅ Audit et pièces justificatives enregistrés avec succès dans la base centrale !")
-            st.balloons()
-        except Exception as e:
-            st.success("✅ Vos réponses ont été enregistrées localement.")
-            st.download_button(
-                label="📥 Télécharger votre copie d'audit complète (CSV / Excel)",
-                data=pd.DataFrame([record]).to_csv(index=False).encode('utf-8'),
-                file_name=f"Audit_{company_name}_{audit_date}.csv",
-                mime="text/csv"
-            )
+            for q in cat_questions:
+                st.markdown(f'<div class="question-title">[{q["id"]}] {q["q"]}</div>', unsafe_allow_html=True)
+                if q["g"]:
+                    st.markdown(f'<div class="guidance-box"><b>Attentes & Guidance :</b><br>{q["g"]}</div>', unsafe_allow_html=True)
+                
+                saved_status = draft_data.get(f"{q['id']}_Réponse", "N/A")
+                status_index = ["Oui", "Non", "N/A"].index(saved_status) if saved_status in ["Oui", "Non", "N/A"] else 2
+                saved_justif = draft_data.get(f"{q['id']}_Justification", "")
 
-# Option de sauvegarde de brouillon
-st.markdown("---")
-st.subheader("💾 Vous n'avez pas fini ? Sauvegarder votre avancement")
-st.caption("Vous pouvez télécharger un fichier de brouillon pour reprendre la saisie plus tard là où vous vous étiez arrêté.")
+                c1, c2 = st.columns([1, 2])
+                with c1:
+                    status = st.radio(
+                        f"Réponse {q['id']}",
+                        options=["Oui", "Non", "N/A"],
+                        index=status_index,
+                        horizontal=True,
+                        key=f"status_{q['id']}"
+                    )
+                with c2:
+                    justification = st.text_area(
+                        f"Justification {q['id']}",
+                        value=saved_justif,
+                        placeholder="Justifiez votre réponse (procédure interne, preuve, plan d'action si Non/NA)...",
+                        key=f"justif_{q['id']}",
+                        height=80
+                    )
+                
+                file_attached = st.file_uploader(
+                    f"📎 Pièce justificative pour [{q['id']}] (Optionnel)",
+                    type=["pdf", "png", "jpg", "jpeg", "docx", "xlsx"],
+                    key=f"file_{q['id']}"
+                )
+                
+                responses[q['id']] = {
+                    "status": status,
+                    "justification": justification
+                }
+                if file_attached is not None:
+                    uploaded_files_dict[q['id']] = file_attached
+                    
+                st.markdown("<hr style='margin: 15px 0; border-top: 1px dashed #E5E7EB;'>", unsafe_allow_html=True)
 
-draft_export = {
-    "Entreprise": company_name if 'company_name' in locals() else "",
-    "Déclarant": auditor_name if 'auditor_name' in locals() else "",
-    "Site": site_location if 'site_location' in locals() else "",
-}
-if 'responses' in locals():
-    for q_id, res in responses.items():
-        draft_export[f"{q_id}_Réponse"] = res["status"]
-        draft_export[f"{q_id}_Justification"] = res["justification"]
+        submit_button = st.form_submit_button(label="🚀 VALIDER ET ENVOYER L'AUDIT")
 
-st.download_button(
-    label="💾 Télécharger le fichier de brouillon (.json)",
-    data=json.dumps(draft_export, ensure_ascii=False, indent=2),
-    file_name=f"Brouillon_Audit_{company_name if 'company_name' in locals() and company_name else 'Incomplet'}.json",
-    mime="application/json"
-)
+    if submit_button:
+        missing_fields = []
+        if not company_name: missing_fields.append("Nom de l'entreprise")
+        if not auditor_name: missing_fields.append("Nom du déclarant")
+        if not site_location: missing_fields.append("Site / Chantier")
+        
+        unjustified = [q_id for q_id, res in responses.items() if res["status"] in ["Non", "N/A"] and not res["justification"].strip()]
+                
+        if missing_fields:
+            st.error(f"⚠️ Veuillez remplir les informations obligatoires : {', '.join(missing_fields)}.")
+        elif unjustified:
+            st.warning(f"⚠️ Une justification est requise pour toute réponse 'Non' ou 'N/A'. Question(s) concernée(s) : {', '.join(unjustified)}")
+        else:
+            st.info("⏳ Enregistrement de l'audit en cours...")
+            
+            record = {
+                "Date": str(audit_date),
+                "Entreprise": company_name,
+                "Déclarant": auditor_name,
+                "Site": site_location,
+            }
+            
+            for q_id, res in responses.items():
+                record[f"{q_id}_Réponse"] = res["status"]
+                record[f"{q_id}_Justification"] = res["justification"]
+                
+                if q_id in uploaded_files_dict:
+                    file_obj = uploaded_files_dict[q_id]
+                    drive_link_or_name = upload_file_to_drive(file_obj, company_name, q_id)
+                    record[f"{q_id}_Fichier"] = drive_link_or_name
+                else:
+                    record[f"{q_id}_Fichier"] = ""
+            
+            try:
+                conn = st.connection("gsheets", type=GSheetsConnection)
+                existing_data = conn.read()
+                df_new = pd.DataFrame([record])
+                updated_df = pd.concat([existing_data, df_new], ignore_index=True)
+                conn.update(data=updated_df)
+                
+                st.success("✅ Audit enregistré avec succès dans la base centrale !")
+                st.balloons()
+            except Exception:
+                st.success("✅ Vos réponses ont été enregistrées localement.")
+                st.download_button(
+                    label="📥 Télécharger votre copie d'audit (CSV / Excel)",
+                    data=pd.DataFrame([record]).to_csv(index=False).encode('utf-8'),
+                    file_name=f"Audit_{company_name}_{audit_date}.csv",
+                    mime="text/csv"
+                )
+
+    st.markdown("---")
+    st.subheader("💾 Vous n'avez pas fini ? Sauvegarder votre avancement")
+    draft_export = {
+        "Entreprise": company_name if 'company_name' in locals() else "",
+        "Déclarant": auditor_name if 'auditor_name' in locals() else "",
+        "Site": site_location if 'site_location' in locals() else "",
+    }
+    if 'responses' in locals():
+        for q_id, res in responses.items():
+            draft_export[f"{q_id}_Réponse"] = res["status"]
+            draft_export[f"{q_id}_Justification"] = res["justification"]
+
+    st.download_button(
+        label="💾 Télécharger le fichier de brouillon (.json)",
+        data=json.dumps(draft_export, ensure_ascii=False, indent=2),
+        file_name=f"Brouillon_Audit_{company_name if 'company_name' in locals() and company_name else 'Incomplet'}.json",
+        mime="application/json"
+    )
+
+# ==========================================
+# ONGLET 2 : ESPACE ADMINISTRATEUR HSE
+# ==========================================
+with tab_admin:
+    st.markdown("""<div class="main-header">🔒 Espace d'Administration & Consultation</div>""", unsafe_allow_html=True)
+    st.markdown("""<div class="sub-header">Consultez l'ensemble des audits validés par les prestataires et examinez leurs justificatifs.</div>""", unsafe_allow_html=True)
+    
+    # Bouton d'actualisation des données
+    if st.button("🔄 Actualiser la liste des audits"):
+        st.cache_data.clear()
+
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        df_audits = conn.read()
+        # Supprimer les lignes vides s'il y en a
+        df_audits = df_audits.dropna(how="all")
+    except Exception as e:
+        df_audits = pd.DataFrame()
+        st.warning("⚠️ Impossible de se connecter directement à Google Sheets pour le moment.")
+
+    if df_audits.empty:
+        st.info("Aucun audit n'a encore été enregistré dans la base.")
+    else:
+        # Construction de la liste sélectionnable
+        audit_options = []
+        for idx, row in df_audits.iterrows():
+            ent = row.get("Entreprise", "Inconnu")
+            dt = row.get("Date", "N/A")
+            st_name = row.get("Site", "N/A")
+            audit_options.append(f"{ent} — {dt} (Site: {st_name})")
+        
+        selected_idx = st.selectbox(
+            "📋 Sélectionnez un audit validé pour afficher l'ensemble des détails :",
+            range(len(audit_options)),
+            format_func=lambda x: audit_options[x]
+        )
+        
+        selected_row = df_audits.iloc[selected_idx]
+        
+        st.markdown("---")
+        
+        # En-tête de la fiche audit sélectionnée
+        st.subheader(f"📄 Fiche Audit : {selected_row.get('Entreprise', 'N/A')}")
+        
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("🏢 Entreprise", str(selected_row.get("Entreprise", "N/A")))
+        c2.metric("👤 Déclarant", str(selected_row.get("Déclarant", "N/A")))
+        c3.metric("📍 Site", str(selected_row.get("Site", "N/A")))
+        c4.metric("📅 Date", str(selected_row.get("Date", "N/A")))
+        
+        # Calcul rapide des totaux Oui / Non / N/A pour cet audit
+        oui_count = sum(1 for col in selected_row.index if col.endswith("_Réponse") and str(selected_row[col]).strip() == "Oui")
+        non_count = sum(1 for col in selected_row.index if col.endswith("_Réponse") and str(selected_row[col]).strip() == "Non")
+        na_count = sum(1 for col in selected_row.index if col.endswith("_Réponse") and str(selected_row[col]).strip() == "N/A")
+        
+        st.markdown("#### 📊 Synthèse des réponses")
+        k1, k2, k3 = st.columns(3)
+        k1.success(f"✅ Conforme (Oui) : {oui_count}")
+        k2.error(f"❌ Non Conforme (Non) : {non_count}")
+        k3.info(f"⚪ Non Applicable (N/A) : {na_count}")
+        
+        st.markdown("---")
+        st.markdown("### 🔍 Détail des 54 Exigences Sécurité")
+        
+        # Regroupement par catégories pour la lecture admin
+        categories_admin = sorted(list(set(q["cat"] for q in QUESTIONS_DATA)))
+        
+        for cat in categories_admin:
+            st.markdown(f"#### 📌 {cat}")
+            cat_q = [q for q in QUESTIONS_DATA if q["cat"] == cat]
+            
+            for q in cat_q:
+                q_id = q["id"]
+                resp_val = str(selected_row.get(f"{q_id}_Réponse", "Non renseigné"))
+                justif_val = str(selected_row.get(f"{q_id}_Justification", "Aucune justification"))
+                file_val = str(selected_row.get(f"{q_id}_Fichier", ""))
+                
+                # Badge couleur selon la réponse
+                if resp_val == "Oui":
+                    badge = "🟢 **Oui**"
+                elif resp_val == "Non":
+                    badge = "🔴 **Non**"
+                else:
+                    badge = "⚪ **N/A**"
+                
+                with st.expander(f"[{q_id}] {q['q']} — {badge}"):
+                    st.write(f"**Exigence / Question :** {q['q']}")
+                    if q['g']:
+                        st.caption(f"**Attentes :** {q['g']}")
+                    st.write(f"**Statut :** {badge}")
+                    st.write(f"**Justification entreprise :** {justif_val}")
+                    
+                    if file_val and file_val.startswith("http"):
+                        st.markdown(f"📎 **Pièce jointe :** [Ouvrir le document ({file_val})]({file_val})")
+                    elif file_val:
+                        st.write(f"📎 **Pièce jointe :** {file_val}")
+                    else:
+                        st.caption("📎 Aucune pièce jointe transmise pour cette question.")

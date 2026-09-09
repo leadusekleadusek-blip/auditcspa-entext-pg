@@ -29,8 +29,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="main-header">🛡️ Formulaire d'Audit Sécurité & HSE</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Évaluation de conformité pour les entreprises extérieures. Merci de répondre à chaque question et de fournir les justifications nécessaires.</div>', unsafe_allow_html=True)
+st.markdown("""<div class="main-header">🛡️ Formulaire d'Audit Sécurité & HSE</div>""", unsafe_allow_html=True)
+st.markdown("""<div class="sub-header">Évaluation de conformité pour les entreprises extérieures. Merci de répondre à chaque question et de fournir les justifications nécessaires.</div>""", unsafe_allow_html=True)
 
 # Base complète des 54 questions
 QUESTIONS_DATA = [

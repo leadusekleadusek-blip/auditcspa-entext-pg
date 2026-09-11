@@ -12,7 +12,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 # Configuration de la page
 st.set_page_config(
     page_title="Audit Sécurité & HSE - Entreprises Extérieures",
-    page_icon="Logo PG audit EE.png",
+    page_icon="Logo PG audit EE.JPG",
     layout="wide",
     initial_sidebar_state="expanded"
 )

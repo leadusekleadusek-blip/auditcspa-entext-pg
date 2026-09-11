@@ -387,7 +387,7 @@ def charger_tous_les_audits():
 st.sidebar.title("📌 Menu Navigation")
 app_mode = st.sidebar.radio(
     "Choisir l'espace :",
-    options=["📝 Formulaire Prestataire", "🔒 Espace Administrateur HSE"],
+    options=["📝 Formulaire Prestataire", "🔒 Espace Administrateur P&G"],
     key="navigation_mode"
 )
 st.sidebar.markdown("---")
@@ -705,7 +705,7 @@ if app_mode == "📝 Formulaire Prestataire":
     )
 
 # ==========================================
-# PAGE PRINCIPALE : ESPACE ADMINISTRATEUR HSE
+# PAGE PRINCIPALE : ESPACE Administrateur P&G
 # ==========================================
 else:
     st.markdown("""<div class="main-header">🔒 Espace d'Administration HSE</div>""", unsafe_allow_html=True)
@@ -724,7 +724,7 @@ else:
     else:
         col_auth1, col_auth2 = st.columns([4, 1])
         with col_auth1:
-            st.success("🔓 Vous êtes connecté en tant qu'Administrateur HSE.")
+            st.success("🔓 Vous êtes connecté en tant qu'Administrateur P&G.")
         with col_auth2:
             if st.button("🔒 Déconnexion"):
                 st.session_state["admin_authenticated"] = False

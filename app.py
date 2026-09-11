@@ -27,7 +27,10 @@ DB_FILE = "audits_db.json"
 if "local_audits" not in st.session_state:
     st.session_state["local_audits"] = []
 
-# Style CSS
+if "admin_authenticated" not in st.session_state:
+    st.session_state["admin_authenticated"] = False
+
+# Style CSS dynamique
 st.markdown("""
     <style>
     .main-header { font-size: 28px; font-weight: bold; color: #1E3A8A; margin-bottom: 5px; }
@@ -62,21 +65,25 @@ st.markdown("""
         margin-bottom: 16px; 
     }
     
+    /* Boutons de validation haute visibilité */
     .stButton > button {
         width: 100% !important;
-        font-size: 20px !important;
+        font-size: 18px !important;
         font-weight: bold !important;
-        padding: 16px 28px !important;
-        background-color: #1E3A8A !important;
+        padding: 16px 24px !important;
+        background-color: #059669 !important;
         color: #FFFFFF !important;
-        border: 3px solid #3B82F6 !important;
+        border: 2px solid #10B981 !important;
         border-radius: 10px !important;
         cursor: pointer !important;
+        box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3) !important;
+        transition: all 0.2s ease-in-out !important;
     }
     .stButton > button:hover {
-        background-color: #2563EB !important;
-        border-color: #60A5FA !important;
+        background-color: #047857 !important;
+        border-color: #34D399 !important;
         color: #FFFFFF !important;
+        transform: translateY(-2px);
     }
     </style>
 """, unsafe_allow_html=True)
@@ -217,9 +224,9 @@ def charger_audits_airtable():
     return records
 
 def enregistrer_audit_airtable(record):
-    """Version de diagnostic pour forcer l'affichage de l'erreur Airtable."""
+    """Envoie une nouvelle ligne d'audit vers Airtable (version nettoyée)."""
     if not AIRTABLE_TOKEN or not AIRTABLE_BASE_ID:
-        st.error(f"❌ Problème de Secrets Streamlit ! Token présent : {bool(AIRTABLE_TOKEN)} | Base ID présent : {bool(AIRTABLE_BASE_ID)}")
+        st.error("❌ Configuration Airtable manquante dans les Secrets Streamlit.")
         return False
     
     url = f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/{AIRTABLE_TABLE_NAME}"
@@ -241,13 +248,13 @@ def enregistrer_audit_airtable(record):
     try:
         resp = requests.post(url, headers=headers, json=payload, timeout=10)
         if resp.status_code in (200, 201):
-            st.success("🎉 La ligne a bien été enregistrée dans Airtable !")
+            st.success("✅ Audit enregistré avec succès dans Airtable !")
             return True
         else:
-            st.error(f"❌ Erreur de rejet Airtable ({resp.status_code}) : {resp.text}")
+            st.error(f"❌ Erreur d'enregistrement Airtable ({resp.status_code}) : {resp.text}")
             return False
     except Exception as e:
-        st.error(f"❌ Erreur de connexion Python : {e}")
+        st.error(f"❌ Erreur de connexion : {e}")
         return False
 
 def get_color_badge(percentage):
@@ -380,10 +387,12 @@ def charger_tous_les_audits():
 st.sidebar.title("📌 Menu Navigation")
 app_mode = st.sidebar.radio(
     "Choisir l'espace :",
-    options=["📝 Formulaire Prestataire", "🔒 Espace administrateur P&G"],
+    options=["📝 Formulaire Prestataire", "🔒 Espace Administrateur HSE"],
     key="navigation_mode"
 )
 st.sidebar.markdown("---")
+
+submit_from_sidebar = False
 
 # ==========================================
 # PANNEAU LATÉRAL DYNAMIQUE SELON LE MODE
@@ -444,43 +453,51 @@ if app_mode == "📝 Formulaire Prestataire":
         key="nav_theme_selection"
     )
 
+    # BOUTON D'ENVOI DANS LA SIDEBAR POUR ÉVITER DE SCROLLER
+    st.sidebar.markdown("---")
+    submit_from_sidebar = st.sidebar.button("🚀 VALIDER ET ENVOYER L'AUDIT", key="btn_submit_sidebar")
+
 else:
-    st.sidebar.markdown("### 📊 Traçabilité Administrateur")
-    df_admin_side = charger_tous_les_audits()
+    # AFFICHAGE SIDEBAR ADMIN UNIQUEMENT SI LE MOT DE PASSE EST VALIDÉ
+    if st.session_state.get("admin_authenticated", False):
+        st.sidebar.markdown("### 📊 Traçabilité Administrateur")
+        df_admin_side = charger_tous_les_audits()
 
-    if not df_admin_side.empty:
-        total_audits_count = len(df_admin_side)
-        scores_list = []
-        
-        admin_options_sidebar = []
-        for idx, row in df_admin_side.iterrows():
-            o_c = sum(1 for c in row.index if str(c).endswith("_Réponse") and str(row[c]).strip() == "Oui")
-            n_c = sum(1 for c in row.index if str(c).endswith("_Réponse") and str(row[c]).strip() == "Non")
-            t_app = o_c + n_c
-            sc = (o_c / t_app * 100) if t_app > 0 else 0.0
-            scores_list.append(sc)
+        if not df_admin_side.empty:
+            total_audits_count = len(df_admin_side)
+            scores_list = []
             
-            badge_icon = "🟢" if sc >= 80 else ("🟠" if sc >= 50 else "🔴")
-            ent = row.get("Entreprise", "Inconnu")
-            dt = row.get("Date", "N/A")
-            st_name = row.get("Site", "N/A")
-            admin_options_sidebar.append(f"{badge_icon} {sc:.0f}% | {ent} — {dt} ({st_name})")
+            admin_options_sidebar = []
+            for idx, row in df_admin_side.iterrows():
+                o_c = sum(1 for c in row.index if str(c).endswith("_Réponse") and str(row[c]).strip() == "Oui")
+                n_c = sum(1 for c in row.index if str(c).endswith("_Réponse") and str(row[c]).strip() == "Non")
+                t_app = o_c + n_c
+                sc = (o_c / t_app * 100) if t_app > 0 else 0.0
+                scores_list.append(sc)
+                
+                badge_icon = "🟢" if sc >= 80 else ("🟠" if sc >= 50 else "🔴")
+                ent = row.get("Entreprise", "Inconnu")
+                dt = row.get("Date", "N/A")
+                st_name = row.get("Site", "N/A")
+                admin_options_sidebar.append(f"{badge_icon} {sc:.0f}% | {ent} — {dt} ({st_name})")
 
-        avg_score_val = (sum(scores_list) / len(scores_list)) if scores_list else 0.0
-        
-        st.sidebar.metric("Total d'audits enregistrés", total_audits_count)
-        st.sidebar.metric("Conformité moyenne", f"{avg_score_val:.1f} %")
-        st.sidebar.markdown("---")
-        
-        st.sidebar.markdown("### 📂 Sélection de l'Audit")
-        selected_admin_sidebar_idx = st.sidebar.selectbox(
-            "Consulter un audit spécifique :",
-            range(len(admin_options_sidebar)),
-            format_func=lambda x: admin_options_sidebar[x],
-            key="sidebar_admin_audit_select"
-        )
+            avg_score_val = (sum(scores_list) / len(scores_list)) if scores_list else 0.0
+            
+            st.sidebar.metric("Total d'audits enregistrés", total_audits_count)
+            st.sidebar.metric("Conformité moyenne", f"{avg_score_val:.1f} %")
+            st.sidebar.markdown("---")
+            
+            st.sidebar.markdown("### 📂 Sélection de l'Audit")
+            selected_admin_sidebar_idx = st.sidebar.selectbox(
+                "Consulter un audit spécifique :",
+                range(len(admin_options_sidebar)),
+                format_func=lambda x: admin_options_sidebar[x],
+                key="sidebar_admin_audit_select"
+            )
+        else:
+            st.sidebar.info("Aucun audit disponible dans la base.")
     else:
-        st.sidebar.info("Aucun audit disponible dans la base.")
+        st.sidebar.info("🔒 Veuillez saisir le mot de passe dans l'espace principal pour débloquer l'administration.")
 
 # ==========================================
 # PAGE PRINCIPALE : FORMULAIRE PRESTATAIRE
@@ -498,32 +515,35 @@ if app_mode == "📝 Formulaire Prestataire":
         st.markdown(f"**Évaluation du score :** {get_color_badge(global_score_pct)}")
         st.progress(global_score_pct / 100.0)
 
-    # --- REPRISE DE BROUILLON DYNAMIQUE ---
+    # --- REPRISE DE BROUILLON TOTALEMENT EDITABLE ---
     with st.expander("📂 Reprendre un brouillon enregistré auparavant (Optionnel)", expanded=False):
         uploaded_draft = st.file_uploader("Importez votre fichier de brouillon (.json) :", type=["json"], key="draft_importer")
         if uploaded_draft is not None:
-            try:
-                draft_data = json.load(uploaded_draft)
-                
-                if "Entreprise" in draft_data:
-                    st.session_state["company_name_key"] = draft_data["Entreprise"]
-                if "Déclarant" in draft_data:
-                    st.session_state["auditor_name_key"] = draft_data["Déclarant"]
-                if "Site" in draft_data:
-                    st.session_state["site_location_key"] = draft_data["Site"]
+            draft_id = f"{uploaded_draft.name}_{uploaded_draft.size}"
+            if st.session_state.get("last_loaded_draft") != draft_id:
+                try:
+                    draft_data = json.load(uploaded_draft)
+                    
+                    if "Entreprise" in draft_data:
+                        st.session_state["company_name_key"] = draft_data["Entreprise"]
+                    if "Déclarant" in draft_data:
+                        st.session_state["auditor_name_key"] = draft_data["Déclarant"]
+                    if "Site" in draft_data:
+                        st.session_state["site_location_key"] = draft_data["Site"]
 
-                for q in QUESTIONS_DATA:
-                    q_id = q["id"]
-                    r_val = draft_data.get(f"{q_id}_Réponse")
-                    j_val = draft_data.get(f"{q_id}_Justification")
-                    if r_val in ["Oui", "Non", "N/A"]:
-                        st.session_state[f"status_{q_id}"] = r_val
-                    if j_val is not None:
-                        st.session_state[f"justif_{q_id}"] = j_val
+                    for q in QUESTIONS_DATA:
+                        q_id = q["id"]
+                        r_val = draft_data.get(f"{q_id}_Réponse")
+                        j_val = draft_data.get(f"{q_id}_Justification")
+                        if r_val in ["Oui", "Non", "N/A"]:
+                            st.session_state[f"status_{q_id}"] = r_val
+                        if j_val is not None:
+                            st.session_state[f"justif_{q_id}"] = j_val
 
-                st.success("✅ Brouillon chargé avec succès ! Toutes les réponses et justifications ont été réinjectées.")
-            except Exception as e:
-                st.error(f"⚠️ Fichier de brouillon invalide : {e}")
+                    st.session_state["last_loaded_draft"] = draft_id
+                    st.success("✅ Brouillon chargé avec succès ! Vous pouvez maintenant modifier l'ensemble des informations et justifications.")
+                except Exception as e:
+                    st.error(f"⚠️ Fichier de brouillon invalide : {e}")
 
     st.subheader("1. Informations de l'Entreprise Extérieure")
     col1, col2 = st.columns(2)
@@ -599,9 +619,10 @@ if app_mode == "📝 Formulaire Prestataire":
                 "justification": q_just
             }
 
-    submit_button = st.button("🚀 VALIDER ET ENVOYER L'AUDIT")
-
-    if submit_button:
+    submit_from_main = st.button("🚀 VALIDER ET ENVOYER L'AUDIT", key="btn_submit_main")
+    
+    # Prise en compte du clic sur le bouton principal OU sur le bouton de la barre latérale
+    if submit_from_main or submit_from_sidebar:
         missing_fields = []
         if not company_name: missing_fields.append("Nom de l'entreprise")
         if not auditor_name: missing_fields.append("Nom du déclarant")
@@ -647,12 +668,11 @@ if app_mode == "📝 Formulaire Prestataire":
             enregistrer_audit_fichier_local(record)
             st.session_state["local_audits"].append(record)
             
-            # 2. Synchronisation Airtable avec message d'erreur
+            # 2. Synchronisation Airtable
             enregistrer_audit_airtable(record)
 
             st.balloons()
             
-            # --- TÉLÉCHARGEMENT DU RAPPORT EXCEL MIS EN FORME POUR LE PRESTATAIRE ---
             st.markdown("### 📥 Télécharger votre rapport d'audit")
             excel_bytes_user = generer_excel_formatted(record)
             nom_entreprise_clean = str(company_name).replace(" ", "_")
@@ -685,20 +705,31 @@ if app_mode == "📝 Formulaire Prestataire":
     )
 
 # ==========================================
-# PAGE PRINCIPALE : ESPACE administrateur P&G
+# PAGE PRINCIPALE : ESPACE ADMINISTRATEUR HSE
 # ==========================================
 else:
     st.markdown("""<div class="main-header">🔒 Espace d'Administration HSE</div>""", unsafe_allow_html=True)
     
     ADMIN_PASSWORD = st.secrets.get("admin_password", "HSE2026Sécurité!")
-    input_pwd = st.text_input("🔑 Saisissez le mot de passe Administrateur :", type="password")
     
-    if input_pwd == "":
-        st.info("🔒 Cet espace est strictly réservé à la consultation administrateur.")
-    elif input_pwd != ADMIN_PASSWORD:
-        st.error("❌ Mot de passe incorrect.")
+    if not st.session_state["admin_authenticated"]:
+        input_pwd = st.text_input("🔑 Saisissez le mot de passe Administrateur :", type="password", key="admin_password_input")
+        if st.button("🔓 Valider le mot de passe"):
+            if input_pwd == ADMIN_PASSWORD:
+                st.session_state["admin_authenticated"] = True
+                st.success("Accès autorisé.")
+                st.rerun()
+            else:
+                st.error("❌ Mot de passe incorrect.")
     else:
-        st.success("🔓 Accès administrateur autorisé.")
+        col_auth1, col_auth2 = st.columns([4, 1])
+        with col_auth1:
+            st.success("🔓 Vous êtes connecté en tant qu'Administrateur HSE.")
+        with col_auth2:
+            if st.button("🔒 Déconnexion"):
+                st.session_state["admin_authenticated"] = False
+                st.rerun()
+
         st.markdown("""<div class="sub-header">Consultez l'ensemble des audits validés, analysez la traçabilité globale et exportez les rapports Excel.</div>""", unsafe_allow_html=True)
         
         # --- SAUVEGARDE & RESTAURATION MANUELLE DE LA BASE ---

@@ -217,8 +217,9 @@ def charger_audits_airtable():
     return records
 
 def enregistrer_audit_airtable(record):
-    """Envoie une nouvelle ligne d'audit vers Airtable."""
+    """Version de diagnostic pour forcer l'affichage de l'erreur Airtable."""
     if not AIRTABLE_TOKEN or not AIRTABLE_BASE_ID:
+        st.error(f"❌ Problème de Secrets Streamlit ! Token présent : {bool(AIRTABLE_TOKEN)} | Base ID présent : {bool(AIRTABLE_BASE_ID)}")
         return False
     
     url = f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/{AIRTABLE_TABLE_NAME}"
@@ -239,8 +240,14 @@ def enregistrer_audit_airtable(record):
     
     try:
         resp = requests.post(url, headers=headers, json=payload, timeout=10)
-        return resp.status_code in (200, 201)
-    except Exception:
+        if resp.status_code in (200, 201):
+            st.success("🎉 La ligne a bien été enregistrée dans Airtable !")
+            return True
+        else:
+            st.error(f"❌ Erreur de rejet Airtable ({resp.status_code}) : {resp.text}")
+            return False
+    except Exception as e:
+        st.error(f"❌ Erreur de connexion Python : {e}")
         return False
 
 def get_color_badge(percentage):
@@ -373,7 +380,7 @@ def charger_tous_les_audits():
 st.sidebar.title("📌 Menu Navigation")
 app_mode = st.sidebar.radio(
     "Choisir l'espace :",
-    options=["📝 Formulaire Prestataire", "🔒 Espace Administrateur P&G"],
+    options=["📝 Formulaire Prestataire", "🔒 Espace administrateur P&G"],
     key="navigation_mode"
 )
 st.sidebar.markdown("---")
@@ -640,12 +647,8 @@ if app_mode == "📝 Formulaire Prestataire":
             enregistrer_audit_fichier_local(record)
             st.session_state["local_audits"].append(record)
             
-            # 2. Synchronisation Airtable
-            succes_airtable = enregistrer_audit_airtable(record)
-            if succes_airtable:
-                st.success("✅ Audit enregistré avec succès dans la base distante Airtable !")
-            else:
-                st.success("✅ Audit enregistré localement dans la session !")
+            # 2. Synchronisation Airtable avec message d'erreur
+            enregistrer_audit_airtable(record)
 
             st.balloons()
             
@@ -682,7 +685,7 @@ if app_mode == "📝 Formulaire Prestataire":
     )
 
 # ==========================================
-# PAGE PRINCIPALE : ESPACE Administrateur P&G
+# PAGE PRINCIPALE : ESPACE administrateur P&G
 # ==========================================
 else:
     st.markdown("""<div class="main-header">🔒 Espace d'Administration HSE</div>""", unsafe_allow_html=True)
@@ -691,7 +694,7 @@ else:
     input_pwd = st.text_input("🔑 Saisissez le mot de passe Administrateur :", type="password")
     
     if input_pwd == "":
-        st.info("🔒 Cet espace est strictement réservé à la consultation administrateur.")
+        st.info("🔒 Cet espace est strictly réservé à la consultation administrateur.")
     elif input_pwd != ADMIN_PASSWORD:
         st.error("❌ Mot de passe incorrect.")
     else:

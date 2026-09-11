@@ -1,23 +1,13 @@
+import base64
 import json
 import io
 import os
+import requests
 from datetime import datetime
 import streamlit as st
 import pandas as pd
-from streamlit_gsheets import GSheetsConnection
-
-# Import d'openpyxl pour la mise en forme de l'export Excel
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-
-# Import des bibliothèques Google Drive
-try:
-    from google.oauth2 import service_account
-    from googleapiclient.discovery import build
-    from googleapiclient.http import MediaIoBaseUpload
-    DRIVE_LIB_AVAILABLE = True
-except ImportError:
-    DRIVE_LIB_AVAILABLE = False
 
 # Configuration de la page
 st.set_page_config(
@@ -26,6 +16,11 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Clés Airtable depuis les secrets Streamlit
+AIRTABLE_TOKEN = st.secrets.get("AIRTABLE_TOKEN", "")
+AIRTABLE_BASE_ID = st.secrets.get("AIRTABLE_BASE_ID", "")
+AIRTABLE_TABLE_NAME = st.secrets.get("AIRTABLE_TABLE_NAME", "Audits")
 
 DB_FILE = "audits_db.json"
 
@@ -175,7 +170,7 @@ THEME_LIST = [
 ]
 
 def enregistrer_audit_fichier_local(record):
-    """Sauvegarde locale d'urgence sur disque."""
+    """Sauvegarde locale d'urgence."""
     audits = []
     if os.path.exists(DB_FILE):
         try:
@@ -187,44 +182,66 @@ def enregistrer_audit_fichier_local(record):
     with open(DB_FILE, "w", encoding="utf-8") as f:
         json.dump(audits, f, ensure_ascii=False, indent=2)
 
-def upload_file_to_drive(uploaded_file, company_name, q_id):
-    if not DRIVE_LIB_AVAILABLE:
-        return f"Fichier joint : {uploaded_file.name}"
+def charger_audits_airtable():
+    """Charge les audits depuis Airtable."""
+    if not AIRTABLE_TOKEN or not AIRTABLE_BASE_ID:
+        return []
+    
+    url = f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/{AIRTABLE_TABLE_NAME}"
+    headers = {"Authorization": f"Bearer {AIRTABLE_TOKEN}"}
+    records = []
+    offset = None
+
+    try:
+        while True:
+            params = {"offset": offset} if offset else {}
+            resp = requests.get(url, headers=headers, params=params, timeout=10)
+            if resp.status_code == 200:
+                data = resp.json()
+                for r in data.get("records", []):
+                    fields = r.get("fields", {})
+                    if "Audit_Data" in fields:
+                        try:
+                            records.append(json.loads(fields["Audit_Data"]))
+                        except Exception:
+                            records.append(fields)
+                    else:
+                        records.append(fields)
+                offset = data.get("offset")
+                if not offset:
+                    break
+            else:
+                break
+    except Exception:
+        pass
+    return records
+
+def enregistrer_audit_airtable(record):
+    """Envoie une nouvelle ligne d'audit vers Airtable."""
+    if not AIRTABLE_TOKEN or not AIRTABLE_BASE_ID:
+        return False
+    
+    url = f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/{AIRTABLE_TABLE_NAME}"
+    headers = {
+        "Authorization": f"Bearer {AIRTABLE_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "fields": {
+            "Entreprise": str(record.get("Entreprise", "")),
+            "Déclarant": str(record.get("Déclarant", "")),
+            "Site": str(record.get("Site", "")),
+            "Date": str(record.get("Date", "")),
+            "Audit_Data": json.dumps(record, ensure_ascii=False)
+        }
+    }
     
     try:
-        creds_info = None
-        if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
-            creds_info = dict(st.secrets["connections"]["gsheets"])
-        elif "gcp_service_account" in st.secrets:
-            creds_info = dict(st.secrets["gcp_service_account"])
-            
-        if not creds_info:
-            return f"Fichier joint : {uploaded_file.name}"
-
-        creds = service_account.Credentials.from_service_account_info(
-            creds_info,
-            scopes=['https://www.googleapis.com/auth/drive.file']
-        )
-        service = build('drive', 'v3', credentials=creds)
-
-        file_metadata = {
-            'name': f"{company_name}_{q_id}_{uploaded_file.name}"
-        }
-        
-        if "drive_folder_id" in st.secrets:
-            file_metadata['parents'] = [st.secrets["drive_folder_id"]]
-
-        media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getvalue()), mimetype=uploaded_file.type)
-        file_res = service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
-        
-        service.permissions().create(
-            fileId=file_res.get('id'),
-            body={'type': 'anyone', 'role': 'reader'}
-        ).execute()
-
-        return file_res.get('webViewLink')
+        resp = requests.post(url, headers=headers, json=payload, timeout=10)
+        return resp.status_code in (200, 201)
     except Exception:
-        return f"Fichier joint : {uploaded_file.name}"
+        return False
 
 def get_color_badge(percentage):
     if percentage >= 80:
@@ -328,20 +345,9 @@ def generer_excel_formatted(selected_data):
     return buffer.getvalue()
 
 def charger_tous_les_audits():
-    """Charge les audits depuis Google Sheets en priorité, puis fusionne avec le local."""
-    audits_list = []
+    """Charge depuis Airtable en priorité, puis fusionne avec le local."""
+    audits_list = charger_audits_airtable()
     
-    # 1. Chargement Google Sheets (Source distante pérenne)
-    try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        df_gsheet = conn.read(ttl=0)
-        df_gsheet = df_gsheet.dropna(how="all")
-        if not df_gsheet.empty:
-            audits_list = df_gsheet.to_dict(orient="records")
-    except Exception:
-        pass
-        
-    # 2. Fusion avec le fichier JSON local
     if os.path.exists(DB_FILE):
         try:
             with open(DB_FILE, "r", encoding="utf-8") as f:
@@ -352,7 +358,6 @@ def charger_tous_les_audits():
         except Exception:
             pass
             
-    # 3. Fusion avec la session active
     if "local_audits" in st.session_state and st.session_state["local_audits"]:
         for record in st.session_state["local_audits"]:
             if record not in audits_list:
@@ -620,24 +625,26 @@ if app_mode == "📝 Formulaire Prestataire":
                 
                 if q_id in uploaded_files_dict:
                     file_obj = uploaded_files_dict[q_id]
-                    drive_link_or_name = upload_file_to_drive(file_obj, company_name, q_id)
-                    record[f"{q_id}_Fichier"] = drive_link_or_name
+                    file_bytes = file_obj.getvalue()
+                    file_b64 = base64.b64encode(file_bytes).decode("utf-8")
+                    
+                    record[f"{q_id}_Fichier"] = {
+                        "name": file_obj.name,
+                        "type": file_obj.type,
+                        "data": file_b64
+                    }
                 else:
-                    record[f"{q_id}_Fichier"] = ""
+                    record[f"{q_id}_Fichier"] = None
             
-            # 1. Sauvegarde locale d'urgence
+            # 1. Sauvegarde locale
             enregistrer_audit_fichier_local(record)
             st.session_state["local_audits"].append(record)
             
-            # 2. Synchronisation Google Sheets
-            try:
-                conn = st.connection("gsheets", type=GSheetsConnection)
-                existing_data = conn.read(ttl=0)
-                df_new = pd.DataFrame([record])
-                updated_df = pd.concat([existing_data, df_new], ignore_index=True)
-                conn.update(data=updated_df)
-                st.success("✅ Audit enregistré dans la base distante Google Sheets !")
-            except Exception:
+            # 2. Synchronisation Airtable
+            succes_airtable = enregistrer_audit_airtable(record)
+            if succes_airtable:
+                st.success("✅ Audit enregistré avec succès dans la base distante Airtable !")
+            else:
                 st.success("✅ Audit enregistré localement dans la session !")
 
             st.balloons()
@@ -693,7 +700,7 @@ else:
         
         # --- SAUVEGARDE & RESTAURATION MANUELLE DE LA BASE ---
         with st.expander("🛠️ Gestion de la Sauvegarde / Restauration de la Base de Données", expanded=False):
-            st.markdown("Utilisez ces outils si le serveur a redémarré ou pour transférer la base d'audits.")
+            st.markdown("Utilisez ces outils pour exporter ou réimporter manuellement vos sauvegardes.")
             col_b1, col_b2 = st.columns(2)
             
             with col_b1:
@@ -726,8 +733,7 @@ else:
         df_audits = charger_tous_les_audits()
 
         if df_audits.empty:
-            st.warning("⚠️ Aucun audit n'a encore été enregistré dans la base ou le serveur a été redémarré.")
-            st.info("💡 **Conseil pérennité :** Si vous hébergez l'application sur Streamlit Cloud, pensez à bien configurer la connexion **Google Sheets** dans les Secrets de l'application afin de garantir que les données restent enregistrées définitivement.")
+            st.warning("⚠️ Aucun audit n'a encore été enregistré.")
         else:
             # --- TABLEAU RÉCAPITULATIF DE TRAÇABILITÉ GLOBALE ---
             st.markdown("---")
@@ -852,7 +858,7 @@ else:
                     q_id = q["id"]
                     resp_val = str(selected_row.get(f"{q_id}_Réponse", "Non renseigné"))
                     justif_val = str(selected_row.get(f"{q_id}_Justification", "Aucune justification"))
-                    file_val = str(selected_row.get(f"{q_id}_Fichier", ""))
+                    file_val = selected_row.get(f"{q_id}_Fichier")
                     
                     if resp_val == "Oui":
                         badge = "🟢 **Oui**"
@@ -868,9 +874,16 @@ else:
                         st.write(f"**Statut :** {badge}")
                         st.write(f"**Justification entreprise :** {justif_val}")
                         
-                        if file_val and file_val.startswith("http"):
+                        if isinstance(file_val, dict) and file_val.get("data"):
+                            file_bytes = base64.b64decode(file_val["data"])
+                            st.download_button(
+                                label=f"📎 Télécharger {file_val.get('name', 'pièce jointe')}",
+                                data=file_bytes,
+                                file_name=file_val.get("name", "document"),
+                                mime=file_val.get("type", "application/octet-stream"),
+                                key=f"dl_admin_{selected_idx}_{q_id}"
+                            )
+                        elif isinstance(file_val, str) and file_val.startswith("http"):
                             st.markdown(f"📎 **Pièce jointe :** [Ouvrir le document]({file_val})")
-                        elif file_val:
-                            st.write(f"📎 **Pièce jointe :** {file_val}")
                         else:
                             st.caption("📎 Aucune pièce jointe transmise pour cette question.")

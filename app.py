@@ -10,16 +10,19 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from PIL import Image
 
-# Chargement sécurisé du logo
+# 1. Recherche du fichier logo dans le même dossier que app.py
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
+
 try:
-    logo_img = Image.open("Logo.png")
+    logo_img = Image.open(LOGO_PATH)
 except Exception:
-    Logo_img = "🛡️"  # Emoji de secours si le fichier n'est pas trouvé
-    
-# Configuration de la page
+    logo_img = "🛡️"
+
+# 2. Configuration unique de la page
 st.set_page_config(
     page_title="Audit Sécurité & HSE - Entreprises Extérieures",
-    page_icon=Logo_img,
+    page_icon=logo_img,
     layout="wide",
     initial_sidebar_state="expanded"
 )

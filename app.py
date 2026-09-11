@@ -8,11 +8,18 @@ import streamlit as st
 import pandas as pd
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from PIL import Image
 
+# Chargement sécurisé du logo
+try:
+    logo_img = Image.open("logo.png")
+except Exception:
+    logo_img = "🛡️"  # Emoji de secours si le fichier n'est pas trouvé
+    
 # Configuration de la page
 st.set_page_config(
     page_title="Audit Sécurité & HSE - Entreprises Extérieures",
-    page_icon="Logo PG audit EE.JPG",
+    page_icon=logo_img,
     layout="wide",
     initial_sidebar_state="expanded"
 )

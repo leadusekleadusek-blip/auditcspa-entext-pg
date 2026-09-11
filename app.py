@@ -12,14 +12,14 @@ from PIL import Image
 
 # Chargement sécurisé du logo
 try:
-    logo_img = Image.open("logo.png")
+    logo_img = Image.open("Logo.png")
 except Exception:
-    logo_img = "🛡️"  # Emoji de secours si le fichier n'est pas trouvé
+    Logo_img = "🛡️"  # Emoji de secours si le fichier n'est pas trouvé
     
 # Configuration de la page
 st.set_page_config(
     page_title="Audit Sécurité & HSE - Entreprises Extérieures",
-    page_icon=logo_img,
+    page_icon=Logo_img,
     layout="wide",
     initial_sidebar_state="expanded"
 )

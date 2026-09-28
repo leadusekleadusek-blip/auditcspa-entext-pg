@@ -1,9 +1,6 @@
 import streamlit as st
 import datetime
 
-# ---------------------------------------------------------
-# CONFIGURATION DE LA PAGE STREAMLIT
-# ---------------------------------------------------------
 st.set_page_config(
     page_title="P&G Amiens — e-Work Permit System",
     page_icon="🛡️",
@@ -11,7 +8,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Style CSS Industriel P&G (Modern SaaS & Print A4)
 st.markdown("""
 <style>
     .main { background-color: #f8fafc; }
@@ -19,18 +15,10 @@ st.markdown("""
         background: linear-gradient(135deg, #003366 0%, #0056b3 100%);
         color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px;
     }
-    .pg-card {
-        background: white; border: 1px solid #cbd5e1; border-radius: 8px; padding: 15px; margin-bottom: 15px;
-    }
-    .stButton>button {
-        border-radius: 6px; font-weight: bold;
-    }
+    .stButton>button { border-radius: 6px; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------------------------------------------------
-# INITIALISATION DES BASES DE DONNÉES FICTIVES (SESSION STATE)
-# ---------------------------------------------------------
 if "permis_db" not in st.session_state:
     st.session_state.permis_db = [
         {
@@ -79,13 +67,11 @@ if "permis_db" not in st.session_state:
         }
     ]
 
-# Référentiels BDD
 db_pdps = {
     "ABYLSEN": ["PDP-2026-042 (Bâtiment M1 - Rénovation)", "PDP-2026-089 (Conditionnement)"],
     "APAVE": ["PDP-2026-104 (Inspection Pression)", "PDP-2026-112 (Conformité Électrique)"],
     "AXIMA": ["PDP-2026-015 (HVAC Zone Production)"],
-    "ENGIE": ["PDP-2026-067 (Chaufferie Vapeur)"],
-    "EULER": ["PDP-2026-090 (Génie Civil Extérieur)"]
+    "ENGIE": ["PDP-2026-067 (Chaufferie Vapeur)"]
 }
 
 db_mops = {
@@ -94,8 +80,7 @@ db_mops = {
     "PDP-2026-104 (Inspection Pression)": ["MoP-01: Épreuve Hydraulique Tuyauterie"],
     "PDP-2026-112 (Conformité Électrique)": ["MoP-01: Audit Armoires TGBT"],
     "PDP-2026-015 (HVAC Zone Production)": ["MoP-01: Nettoyage Filtres CTA"],
-    "PDP-2026-067 (Chaufferie Vapeur)": ["MoP-01: Isoler Purgeur Vapeur"],
-    "PDP-2026-090 (Génie Civil Extérieur)": ["MoP-01: Fouille Terrassement TP"]
+    "PDP-2026-067 (Chaufferie Vapeur)": ["MoP-01: Isoler Purgeur Vapeur"]
 }
 
 db_zones = {
@@ -105,9 +90,6 @@ db_zones = {
     "Zone Extérieure / Logistique": {"pr": "PR-1 (Entrée Principale)", "confinement": "ZC-00 (Poste Central)", "urg": "03.22.54.33.33"}
 }
 
-# ---------------------------------------------------------
-# BARRE DE NAVIGATION LATÉRALE
-# ---------------------------------------------------------
 st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/thumb/8/85/Procter_%26_Gamble_logo.svg/1024px-Procter_%26_Gamble_logo.svg.png", width=80)
 st.sidebar.title("e-Work Permit P&G")
 st.sidebar.caption("Site d'Amiens — Solution Unifiée")
@@ -121,9 +103,6 @@ role = st.sidebar.radio(
     ]
 )
 
-# ==============================================================================
-# INTERFACE 1 : BORNE KIOSK TACTILE (EE / N2)
-# ==============================================================================
 if role == "🖥️ Borne Kiosk (Intervenant EE)":
     st.markdown("""
     <div class="pg-header">
@@ -133,29 +112,22 @@ if role == "🖥️ Borne Kiosk (Intervenant EE)":
     """, unsafe_allow_html=True)
 
     tab_choice = st.radio("Sélectionnez votre parcours :", ["🚀 COMMENCER UN PERMIS DE TRAVAIL", "📝 SIGNER UN PLAN DE PRÉVENTION (ÉMARGEMENT PDP)"], horizontal=True)
-
     st.divider()
 
-    # --- PARCOURS 1 : ÉMARGEMENT DÉDIÉ PDP ---
     if tab_choice == "📝 SIGNER UN PLAN DE PRÉVENTION (ÉMARGEMENT PDP)":
         st.subheader("📝 Émargement d'un Plan de Prévention (PDP)")
-        
         col_p1, col_p2 = st.columns(2)
         with col_p1:
             soc_pdp = st.selectbox("Entreprise Extérieure", list(db_pdps.keys()), key="pdp_soc")
             pdp_list = db_pdps.get(soc_pdp, [])
             pdp_sel = st.selectbox("Plan de Prévention rattaché", pdp_list, key="pdp_sel")
             nom_pdp = st.text_input("Nom & Prénom de l'intervenant", key="pdp_nom")
-            
         with col_p2:
             statut_pdp = st.selectbox("Statut de l'intervenant", ["N1 (Compagnon)", "N2 (Responsable)"], key="pdp_statut")
-            
-            # CONDITIONNEL : Téléphone uniquement si N2
             if "N2" in statut_pdp:
                 tel_pdp = st.text_input("N° Téléphone du Responsable N2", placeholder="06 XX XX XX XX", key="pdp_tel")
             else:
                 tel_pdp = "Non requis (N1)"
-
             st.write("✍️ **Signature Tactile de l'Émargement :**")
             st.info(" [ Zone de Signature Tactile Empreinte / Stylet ] ")
 
@@ -165,15 +137,10 @@ if role == "🖥️ Borne Kiosk (Intervenant EE)":
             else:
                 st.balloons()
                 st.success(f"Émargement enregistré avec succès pour {nom_pdp} ({statut_pdp}) sur le {pdp_sel} !")
-
-    # --- PARCOURS 2 : PERMIS DE TRAVAIL COMPLET ---
     else:
         st.subheader("🚀 Parcours Permis de Travail (WorkPermit / STA)")
-
-        # Étape 1 : Société & Mode d'envoi + Badging RFID
         st.markdown("##### Étape 1 : Entreprise & Identification N2")
         c_rfid, c_soc = st.columns([1, 2])
-        
         with c_rfid:
             st.info("💡 **Effet WOW Demonstration**")
             if st.button("💳 Simuler Passage Badge RFID / NFC", use_container_width=True):
@@ -181,24 +148,19 @@ if role == "🖥️ Borne Kiosk (Intervenant EE)":
                 st.success("Badge Détecté : Léa DUSEK (ABYLSEN)")
 
         default_n2 = "Léa DUSEK" if st.session_state.get("badge_active") else "Léa DUSEK"
-        
         with c_soc:
             soc_pt = st.selectbox("Entreprise Extérieure (EE)", list(db_pdps.keys()), index=0)
             pdp_pt = st.selectbox("Plan de Prévention (PDP)", db_pdps.get(soc_pt, []))
             mop_pt = st.selectbox("Mode Opératoire (MoP) rattaché", db_mops.get(pdp_pt, ["MoP Standard"]))
-            n2_nom = st.selectbox("Responsable N2 présent", ["Léa DUSEK", "Matthieu MARTIN", "Alexandre LEFEBVRE", "Cindy BERNARD"])
+            n2_nom = st.selectbox("Responsable N2 présent", ["Léa DUSEK", "Matthieu MARTIN", "Alexandre LEFEBVRE"])
             mode_envoi = st.radio("Option d'envoi du permis :", ["Programmé (Validation Batch demain matin à 07h30)", "Immédiat (Chantier Urgence / Jour même)"], horizontal=True)
 
         st.divider()
-
-        # Étape 2 : Localisation & Mapping Automatique
         st.markdown("##### Étape 2 : Localisation & Mapping Sécurité Automatique")
         col_loc1, col_loc2 = st.columns(2)
-        
         with col_loc1:
             zone_pt = st.selectbox("Zone du Chantier", list(db_zones.keys()))
             emplacement_pt = st.text_input("Précision d'emplacement (Texte libre)", value="1er étage, Bureau 104")
-            
             map_data = db_zones.get(zone_pt, {})
             st.warning(f"""
             📍 **Mapping Sécurité Secteur Automatisé :**
@@ -210,11 +172,9 @@ if role == "🖥️ Borne Kiosk (Intervenant EE)":
         with col_loc2:
             st.markdown("##### Étape 3 : STA, EPIs & Dérogations")
             st.caption("⚠️ EPIs Obligatoires : Chaussures EN 20345, Casque + Jugulaire, Lunettes EN 166, Gilet, Gants Anti-coupure.")
-            
             chk_effp2 = st.checkbox("Masque FFP2 / Protection Respiratoire")
             chk_harnais = st.checkbox("Harnais 2 Longes (Travail en Hauteur)")
             chk_bouchons = st.checkbox("Bouchons d'oreilles / Bruit > 80dB")
-
             st.write("**Permis Spécifiques (HRT) & Dérogations Déclenchées :**")
             chk_confine = st.checkbox("Espace Confiné (Mesures O2/H2S + Vigie obligatoire)")
             chk_loto = st.checkbox("Consignation / Déconsignation (LOTO)")
@@ -222,10 +182,7 @@ if role == "🖥️ Borne Kiosk (Intervenant EE)":
             chk_casque_rouge = st.checkbox("Utilisation Cutter / Échelle ➔ Dérogation Casque Rouge")
 
         st.divider()
-
-        # Étape 4 : Synthèse & Co-Signatures
         st.markdown("##### Étape 4 : Co-signatures Tactiles de l'Équipe")
-        
         col_comp1, col_comp2 = st.columns(2)
         with col_comp1:
             st.text_input("Compagnon 1 (Responsable N2)", value=f"{n2_nom} (N2)")
@@ -238,7 +195,6 @@ if role == "🖥️ Borne Kiosk (Intervenant EE)":
             derog_list = []
             if chk_meuleuse: derog_list.append("Meuleuse d'angle")
             if chk_casque_rouge: derog_list.append("Casque Rouge (Cutter/Échelle)")
-
             permis_list = []
             if chk_confine: permis_list.append("Espace Confiné")
             if chk_loto: permis_list.append("Consignation (LOTO)")
@@ -269,9 +225,6 @@ if role == "🖥️ Borne Kiosk (Intervenant EE)":
             st.balloons()
             st.success(f"Permis {nouveau_pt['id']} créé avec succès ! Transmis au Donneur d'Ordre.")
 
-# ==============================================================================
-# INTERFACE 2 : DASHBOARD LIVE & BATCH 07H30 (DO / HSE)
-# ==============================================================================
 elif role == "📊 Dashboard Live & Batch 07h30 (DO / HSE)":
     st.markdown("""
     <div class="pg-header" style='background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);'>
@@ -280,7 +233,6 @@ elif role == "📊 Dashboard Live & Batch 07h30 (DO / HSE)":
     </div>
     """, unsafe_allow_html=True)
 
-    # Indicateurs Métiers (KPIs)
     kpi1, kpi2, kpi3, kpi4 = st.columns(4)
     total_permis = len(st.session_state.permis_db)
     en_attente = sum(1 for p in st.session_state.permis_db if p["statut"] == "EN_ATTENTE_BATCH")
@@ -291,10 +243,8 @@ elif role == "📊 Dashboard Live & Batch 07h30 (DO / HSE)":
     kpi2.metric("En Attente Batch (07h30)", en_attente)
     kpi3.metric("Permis Validés Actifs", valides)
     kpi4.metric("Dérogations Casque Rouge", derogations)
-
     st.divider()
 
-    # Validation du Batch de 07h30
     st.subheader("⚡ Validation Globale de la Fournée du Matin (Batch 07h30)")
     c_batch_txt, c_batch_btn = st.columns([3, 1])
     with c_batch_txt:
@@ -308,9 +258,6 @@ elif role == "📊 Dashboard Live & Batch 07h30 (DO / HSE)":
     st.subheader("📋 Liste des Permis du Jour")
     st.dataframe(st.session_state.permis_db, use_container_width=True)
 
-# ==============================================================================
-# INTERFACE 3 : INSPECTION TERRAIN QR CODE (CASQUE ROUGE)
-# ==============================================================================
 else:
     st.markdown("""
     <div class="pg-header" style='background: linear-gradient(135deg, #b91c1c 0%, #7f1d1d 100%);'>
@@ -320,11 +267,9 @@ else:
     """, unsafe_allow_html=True)
 
     col_s1, col_s2 = st.columns([1, 2])
-
     with col_s1:
         st.subheader("📱 Smartphone Casque Rouge")
         pt_sel_scan = st.selectbox("Sélectionnez le permis à scanner sur chantier :", [p["id"] for p in st.session_state.permis_db])
-        
         if st.button("🔍 Simuler Scan QR Code", type="primary", use_container_width=True):
             st.session_state.scanned = next(p for p in st.session_state.permis_db if p["id"] == pt_sel_scan)
 
@@ -333,7 +278,6 @@ else:
         if "scanned" in st.session_state:
             p = st.session_state.scanned
             status_color = "#10b981" if p["statut"] == "VALIDÉ" else "#f59e0b"
-            
             st.markdown(f"""
             <div style="background: white; border: 2px solid #003366; padding: 20px; border-radius: 8px;">
                 <div style="display:flex; justify-content:space-between; align-items:center;">

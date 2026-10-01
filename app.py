@@ -1,7 +1,7 @@
 import datetime
 import json
 import urllib.request
-import Streamlit as st
+import streamlit as st
 import unicodedata
 from fpdf import FPDF
 
@@ -9,7 +9,7 @@ from fpdf import FPDF
 # CONFIGURATION DE LA PAGE STREAMLIT
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="P&G Amiens — e-Work Permit System",
+    page_title="P&G Amiens — e-Work Permit System Exhaustif",
     page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -115,12 +115,8 @@ db_zones_carto = {
     "Zone Extérieure / Logistique / TP": {"pr": "PR-1 (Entrée Principale)", "confinement": "ZC-00 (Poste Central)", "urgence": "03.22.54.33.33", "sprinkler": False, "detection": False}
 }
 
-db_materiaux = ["Acier / Carbone", "Inox 316L / 304L", "Aluminium", "Béton / Maçonnerie", "PVC / Plastique"]
-db_disques_blanchiment = ["Disque fibre abrasif", "Brosse métallique torsadée", "Clean & Strip"]
-
 etapes_noms = ["Date & EE", "PDP & MoP", "Responsable N2", "Zone & Urgences", "Check-list & EPIs", "Permis Spécifiques (HRT)", "Synthèse & Signatures"]
 
-# BDD
 if "permis_db" not in st.session_state:
     st.session_state.permis_db = []
 
@@ -129,7 +125,7 @@ if "kiosk_mode" not in st.session_state:
 if "step" not in st.session_state:
     st.session_state.step = 1
 
-# Initialisation des données
+# INITIALISATION EXHAUSTIVE DE TOUS LES CHAMPS FORM_DATA
 if "form_data" not in st.session_state:
     st.session_state.form_data = {
         "date_str": datetime.date.today().strftime("%d/%m/%Y"),
@@ -144,73 +140,89 @@ if "form_data" not in st.session_state:
         "description": "Maintenance et travaux sur site",
         "intervenants": ["Léa DUSEK", "Matthieu MARTIN"],
         
-        # Triggers Permis Spécifiques
+        # PERMIS SPÉCIFIQUES DÉCLENCHEURS
         "p_hauteur": False, "p_toiture": False, "p_points_chauds": False, "p_excavation": False,
         "p_grutage": False, "p_confine": False, "p_electrique": False, "p_consignation": False, "p_systeme_risque": False,
 
         # 1. HAUTEUR / NACELLE / ÉCHAFAUDAGE
         "h_pirl": False, "h_pirl_vgp": True, "h_pirl_soc": "ABYLSEN",
-        "h_nacelle": False, "h_nacelle_vgp": True, "h_nacelle_caces": True, "h_nacelle_aut": True, "h_nacelle_harnais": True, "h_nacelle_soc": "ABYLSEN",
-        "h_echaf": False, "h_echaf_type": "Utilisation",
-        "h_echaf_montage_qualif": True, "h_echaf_montage_harnais": True,
-        "h_echaf_util_qualif": True, "h_echaf_util_vgp": True, "h_echaf_util_certif": True, "h_echaf_util_verif_j": True, "h_echaf_soc": "ABYLSEN",
+        "h_nacelle": False, "h_nacelle_vgp": True, "h_nacelle_checklist": True, "h_nacelle_caces": True, "h_nacelle_aut": True, "h_nacelle_harnais": True, "h_nacelle_soc": "ABYLSEN",
+        "h_echaf": False,
+        "h_echaf_montage": False, "h_echaf_montage_qualif": True, "h_echaf_montage_harnais": True,
+        "h_echaf_util": False, "h_echaf_util_qualif": True,
+        "h_echaf_ctrl_regle": True, "h_echaf_certif_affiche": True, "h_echaf_verif_j": True, "h_echaf_soc_util": "ABYLSEN",
 
         # 2. ACCÈS TOITURE
-        "toiture_protection": "Garde-corps périphériques conformes",
-        "toiture_valideur": "Matthieu MARTIN (Habilité ePDP Accès Toiture)",
+        "toiture_protection": "Garde-corps",
+        "toiture_dist_bord": "Plus de 3m du bord",
+        "toiture_signa_3m": True,
+        "toiture_valideur": "Matthieu MARTIN (Habilité ePDP)",
 
         # 3. POINT CHAUD
-        "chaud_gants_type": "Gants de Soudeur Croûte de Cuir (EN 12477)",
-        "chaud_extincteur1": "Eau + Additif 6L", "chaud_extincteur2": "CO2 5kg",
+        "chaud_gants_soudeur": False, "chaud_gants_chaleur": False, "chaud_gants_anticoupure": True,
+        "chaud_vetement_ignifuge": True,
+        "chaud_extincteur1": "Eau + additifs", "chaud_extincteur2": "CO2",
         "chaud_degage_10m": True, "chaud_baches": False,
         "chaud_traverse_mur": False, "chaud_vigie_opposee": False,
-        "chaud_ouverture_10m": False, "chaud_obstruction": False,
+        "chaud_ouverture_10m": False, "chaud_obstruction": False, "chaud_vigie_autre_cote": False,
         "chaud_vigie_nom": "Matthieu MARTIN",
-        "chaud_heure_fin": "15:00", "chaud_heure_fin_ronde": "16:00",
+        "chaud_personne_surv_60m": "Léa DUSEK",
+        "chaud_heure_fin": "15:00", "chaud_heure_depart": "16:00", "chaud_commentaires": "",
 
         # 4. EXCAVATION / TRANCHÉE
         "excav_plans_eaux_indus": True, "excav_plans_eaux_usees": True, "excav_plans_eaux_pluv": True, "excav_plans_eaux_incendie": True,
         "excav_plans_ht": True, "excav_plans_bt": True, "excav_plans_gaz": True,
         "excav_struct_proximite": False, "excav_architecte": False, "excav_dict": True,
-        "excav_pompe_eau": False, "excav_balisage": True, "excav_vehicule_3m": True, "excav_deblais": True,
-        "excav_acces_type": "Escalier / Rampe sécurisée",
+        "excav_effondrement": False, "excav_eau_pompe": False, "excav_balisage": True, "excav_vehicule_3m": True, "excav_deblais": True,
+        "excav_acces": "Escalier / Rampe", "excav_echelle_derogation": False,
         "excav_profondeur_130": False, "excav_blindage": False,
-        "excav_schema": "Fouille de 1.0m de profondeur pour raccordement.",
+        "excav_schema_commentaires": "",
         "excav_chef_manoeuvre": "Léa DUSEK", "excav_do": "Matthieu MARTIN", "excav_casque_rouge": "Alexandre LEFEBVRE",
 
         # 5. GRUTAGE
-        "grut_desc": "Levage groupe froid rooftop",
+        "grut_desc_mop": "Levage groupe froid",
         "grut_poids_charge": 2500.0, "grut_poids_acc": 200.0, "grut_unite": "kg",
         "grut_immat": "GRUE-AMIENS-88", "grut_fleche": 35.0, "grut_portee": 20.0, "grut_pression_patin": "12 T/m²", "grut_rayon": 15.0,
         "grut_balisage": True, "grut_plan_vue": True, "grut_plan_elev": True, "grut_obstacles": True,
-        "grut_anemometre": True, "grut_vent_mesure": 18.0, "grut_vent_unite": "km/h",
-        "grut_dispo_pesage": True, "grut_centre_gravite": True, "grut_angles_elingue": True, "grut_plaques_rep": True,
-        "grut_chef_m": "Léa DUSEK (ABYLSEN)", "grut_elingueur": "Matthieu MARTIN (ABYLSEN)", "grut_grutier": "Jean LEVAGE (APAVE)",
+        "grut_anemometre": True, "grut_vent_val": 18.0, "grut_vent_unite": "km/h",
+        "grut_pesage": True, "grut_centre_gravite": True, "grut_angles_elingue": True, "grut_plaques_rep": True,
+        "grut_chef_m_nom": "Léa DUSEK", "grut_chef_m_soc": "ABYLSEN",
+        "grut_elingueur_nom": "Matthieu MARTIN", "grut_elingueur_soc": "ABYLSEN",
+        "grut_grutier_nom": "Jean LEVAGE", "grut_grutier_soc": "APAVE",
         "grut_certif_grue": True, "grut_certif_acc": True, "grut_certif_plaques": True, "grut_check_j_grue": True, "grut_check_j_acc": True,
         "grut_pattes_concu": True, "grut_pattes_defaut": False, "grut_pattes_adequation": True, "grut_charges_annexes": True,
-        "grut_schema": "Schéma de levage sur stabilisateurs béton.",
+        "grut_schema_commentaires": "",
+        "grut_do_sign": "Matthieu MARTIN", "grut_casque_rouge_sign": "Alexandre LEFEBVRE",
 
         # 6. ESPACE CONFINÉ
         "conf_lieu": "Cuve C-102 Ligne 3",
         "conf_r_atmo": True, "conf_r_chimique": False, "conf_r_inflam": False, "conf_r_orga": False,
         "conf_r_meca": False, "conf_r_thermiq": False, "conf_r_bruit": False, "conf_troudhomme_610": True,
         "conf_catec": True, "conf_hauteur": False, "conf_m20": True,
-        "conf_secouriste": "Attribué automatique (Poste M1)", "conf_medical": "Infirmerie Centrale M1",
+        "conf_secouriste": "Attribution automatique (Zone M1)", "conf_medical": "Infirmerie Centrale M1",
         "conf_action_chaud": False, "conf_ventilation_nat": True, "conf_ventilation_forcee": True, "conf_ventilation_debit": "60 m3/h/pers",
         "conf_consignation_gaz": True, "conf_cuve_vide": True, "conf_vol_caches": False, "conf_eclairage_24v": True, "conf_blocage_ouvert": True,
-        "conf_echaf_echelle": False, "conf_prod_chim": False, "conf_laser": False, "conf_comm_type": "Talkie-Walkie étanche",
-        "conf_o2": 20.9, "conf_h2s_check": False, "conf_h2s": 0.0, "conf_co_check": False, "conf_co": 0.0, "conf_explo_check": False, "conf_explo": 0.0,
-        "conf_temp_cuve": 22.0, "conf_verif_temp": "Léa DUSEK (N2)", "conf_inflam_lel": 0.0, "conf_verif_lel": "Léa DUSEK (N2)",
+        "conf_echaf_echelle": False, "conf_prod_chim": False, "conf_laser": False, "conf_comm_type": "Talkie Walkie",
+        "conf_o2": 20.9, "conf_o2_contre_mesure": 20.9,
+        "conf_h2s_check": False, "conf_h2s": 0.0,
+        "conf_co_check": False, "conf_co": 0.0,
+        "conf_explo_check": False, "conf_explo": 0.0,
+        "conf_temp_cuve": 22.0, "conf_verif_temp": "N2", "conf_inflam_lel": 0.0, "conf_verif_lel": "N2",
+        "conf_schema_commentaires": "",
         "conf_entrant": "Léa DUSEK", "conf_standby": "Matthieu MARTIN", "conf_do": "Alexandre LEFEBVRE",
 
         # 7. TRAVAIL ÉLECTRIQUE
         "elec_modife": False, "elec_armoire": True, "elec_voisinage_tension": True, "elec_courant_faible": False,
-        "elec_releve": True, "elec_chemins": False, "elec_voisinage_nues": False, "elec_valideur_ei": "Valideur E&I (Habilité B2V/HC)",
+        "elec_releve": True, "elec_chemins": False, "elec_voisinage_nues": False, "elec_valideur_ei": "Valideur E&I (B2V/HC)",
 
         # 8. CONSIGNATION LOTO (3 PHASES)
-        "loto_methode_ouverture": "2 vannes et vanne de drain", "loto_loc1": "Vanne V-101 Amont", "loto_loc2": "Vanne V-102 Aval / Drain D-01",
+        "loto_ouverture_methode": "2 vannes et vanne de drain", "loto_ouvert_loc1": "Vanne V-101 Amont", "loto_ouvert_loc2": "Vanne V-102 Aval / Drain D-01",
         "loto_is_elec": True, "loto_is_elec_loc1": "TGBT-M1-Armoire 4", "loto_is_elec_loc2": "Cadenas LOTO #884",
-        "loto_is_pneu": False, "loto_is_hydra": False, "loto_is_residu": True, "loto_is_residu_loc1": "Purge pression résiduelle", "loto_is_residu_loc2": "Manomètre à 0 bar",
+        "loto_fusible": False, "loto_fusible_loc1": "", "loto_fusible_loc2": "",
+        "loto_cable": False, "loto_cable_loc1": "", "loto_cable_loc2": "",
+        "loto_pneu": False, "loto_pneu_loc1": "", "loto_pneu_loc2": "",
+        "loto_hydra": False, "loto_hydra_loc1": "", "loto_hydra_loc2": "",
+        "loto_residu": True, "loto_residu_loc1": "Purge pression résiduelle", "loto_residu_loc2": "Manomètre à 0 bar",
         "loto_drain_ouvert": True, "loto_eq_ouvert": True, "loto_eq_lave": True, "loto_eq_sanitise": True,
 
         # 9. SYSTÈME À RISQUES / ATEX / CHIMIQUE
@@ -218,27 +230,16 @@ if "form_data" not in st.session_state:
         "sr_balisage": True, "sr_douche_rince": True, "sr_ramonage": False, "sr_ramonage_dt": "01/10/2026 08:00",
         "sr_isolement": True, "sr_feuille_loto": True, "sr_zonage_atex": True,
         "sr_epi_ecran": True, "sr_epi_lunettes": False, "sr_epi_gants_chim": True, "sr_epi_comb1": False, "sr_epi_comb2": True,
-        "sr_epi_bottes": True, "sr_epi_cartouche": True, "sr_epi_ari": False, "sr_epi_3m6000": False, "sr_epi_versaflo": False,
+        "sr_epi_bottes": True, "sr_epi_cartouche": True, "sr_epi_ari": False, "sr_epi_3m6000": False, "sr_epi_versaflo": False, "sr_epi_no_versaflo": True,
         "sr_auxiliaire_equipe": True, "sr_comm_moyen": "Talkie-Walkie ATEX",
         "sr_inspect_remise": True, "sr_inspect_nom": "Léa DUSEK", "sr_inspect_dt": "01/10/2026 17:00",
+        "sr_schema_commentaires": "",
         "sr_sign_intervenant": "Léa DUSEK", "sr_sign_do": "Matthieu MARTIN", "sr_sign_operations": "Alexandre LEFEBVRE",
 
-        # STA & Outillage
-        "sta_prod_chimique": False, "produits_liste": "", "sta_dta": False,
-        "sta_electroportatif": False, "sta_meuleuse": False,
-        "meuleuse_diametre": "125 mm", "meuleuse_operateurs": ["Léa DUSEK"], "meuleuse_marque": "Bosch Pro", "meuleuse_alim": "Batterie 18V", "meuleuse_ref": "MEU-042", "meuleuse_vitesse": "11000",
-        "meu_env_plain_pied": True, "meu_env_hauteur": False, "meu_env_confine": False, "meu_env_excavation": False, "meu_env_stable": True, "meu_env_maintien_2mains": True, "meu_env_piece_fixee": True, "meu_env_hors_ligne_tir": True, "meu_position_op": "Debout",
-        "meuleuse_u_decoupe": False, "meuleuse_mat_decoupe": db_materiaux[0], "meuleuse_u_ebavurage": False, "meuleuse_mat_ebavurage": db_materiaux[0], "meuleuse_u_flap": False, "meuleuse_u_blanchiment": False, "meuleuse_disque_blanchiment": db_disques_blanchiment[0],
-        "sta_pirl_nacelle": False, "sta_couteau_lame": False, "sta_echelle_escabeau": False,
-
-        # Dangers & EPIs
-        "r_exigu": False, "r_superpose": False, "r_inconfortable": False, "r_fumee_poussiere": False, "r_bruit_80db": False, "r_eq_mouvement": False, "r_chute_objets": False, "r_vehicule": False, "r_escalier": False, "r_bords_tranchants": False, "r_metaux_chaud": False, "r_feu_flamme": False, "r_cables_sol": False,
-        "epi_lunettes_chantier_visiere": True, "epi_lunettes_etanches": False, "epi_visiere_idra": False, "epi_pare_visage": False, "epi_casque_jugulaire": False, "epi_casque_auditif": False, "epi_gants_coupure": True, "epi_gants_manutention": False, "epi_gants_chimique": False, "epi_gants_electrique": False, "epi_bouchons_jetables": False, "epi_bouchons_moules": False, "epi_ffp1_ffp2": False, "epi_3m6000": False, "epi_versaflo": False, "epi_cartouche_abek": False, "epi_autre": ""
+        # EPIs de base
+        "epi_casque_jugulaire": False, "epi_gants_electrique": False, "epi_visiere_idra": False, "epi_gants_coupure": True
     }
 
-# ---------------------------------------------------------
-# NETTOYAGE DES TEXTES POUR POLICES FPDF
-# ---------------------------------------------------------
 def sanitize_text(text):
     if not isinstance(text, str): text = str(text)
     text = text.replace("🔥", "[Pt Chaud]").replace("🦺", "[Confiné]").replace("🧗", "[Hauteur]").replace("⚡", "[LOTO]").replace("⚠️", "[!]").replace("✅", "[OK]").replace("🚜", "[Excavation]")
@@ -246,50 +247,38 @@ def sanitize_text(text):
     cleaned = ''.join(c for c in normalized if not unicodedata.combining(c))
     return cleaned.encode('latin-1', 'ignore').decode('latin-1')
 
-# ---------------------------------------------------------
-# GENERATION PDF
-# ---------------------------------------------------------
 def generer_pdf_bytes(permis):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.set_fill_color(0, 51, 102)
-    pdf.rect(10, 10, 190, 22, 'F')
-    pdf.set_text_color(255, 255, 255)
-    pdf.set_font("Helvetica", "B", 14)
-    pdf.text(15, 20, sanitize_text("PROCTER & GAMBLE AMIENS - e-Work Permit System"))
+    pdf.set_fill_color(0, 51, 102); pdf.rect(10, 10, 190, 22, 'F')
+    pdf.set_text_color(255, 255, 255); pdf.set_font("Helvetica", "B", 14)
+    pdf.text(15, 20, sanitize_text("PROCTER & GAMBLE AMIENS - e-Work Permit System EXHAUSTIF"))
     pdf.set_font("Helvetica", "", 10)
     pdf.text(15, 27, sanitize_text(f"Ref: {permis['id']} | Date: {permis['date_travaux']} | Heure: {permis['heure']}"))
     pdf.set_y(38)
 
-    if permis['statut'] == 'VALIDÉ':
-        pdf.set_fill_color(220, 252, 231); pdf.set_draw_color(34, 197, 94); pdf.set_text_color(22, 101, 52)
-        status_str = "PERMIS VALIDE PAR LE DONNEUR D'ORDRE"
-    else:
-        pdf.set_fill_color(254, 240, 138); pdf.set_draw_color(234, 179, 8); pdf.set_text_color(133, 77, 14)
-        status_str = "PERMIS EN ATTENTE DE VALIDATION BATCH (07h30)"
-
+    pdf.set_fill_color(220, 252, 231); pdf.set_draw_color(34, 197, 94); pdf.set_text_color(22, 101, 52)
     pdf.rect(10, 38, 190, 10, 'DF')
     pdf.set_font("Helvetica", "B", 11)
-    pdf.text(15, 44.5, sanitize_text(status_str))
-    pdf.set_text_color(0, 0, 0)
-    pdf.set_y(54)
+    pdf.text(15, 44.5, sanitize_text("PERMIS VALIDE & AUDITABLE SUR COMPTE ePDP"))
+    pdf.set_text_color(0, 0, 0); pdf.set_y(54)
 
     pdf.set_font("Helvetica", "B", 11)
     pdf.cell(0, 6, sanitize_text("1. INFORMATIONS GENERALES & SOUS-TRAITANCE"), 0, 1)
     pdf.set_font("Helvetica", "", 9)
-    pdf.cell(0, 5, sanitize_text(f"Societe Intervenante: {permis['societe']} | PDP: {permis['pdp']}"), 0, 1)
+    pdf.cell(0, 5, sanitize_text(f"Societe: {permis['societe']} | PDP: {permis['pdp']} | MoP: {permis['mop']}"), 0, 1)
     if permis.get("is_subcontractor"):
-        pdf.cell(0, 5, sanitize_text(f"[SOUS-TRAITANCE DETECTEE] N2 Titulaire Obligatoire: {permis.get('titulaire_n2')}"), 0, 1)
-    pdf.cell(0, 5, sanitize_text(f"Responsable N2 Site: {permis['n2']} | Secteur: {permis['zone']} ({permis.get('emplacement', '')})"), 0, 1)
+        pdf.cell(0, 5, sanitize_text(f"[SOUS-TRAITANCE DETECTEE] N2 Titulaire Valideur: {permis.get('titulaire_n2')}"), 0, 1)
+    pdf.cell(0, 5, sanitize_text(f"Responsable N2: {permis['n2']} | Lieu: {permis['zone']} ({permis.get('emplacement', '')})"), 0, 1)
     pdf.ln(3)
 
     pdf.set_font("Helvetica", "B", 11)
-    pdf.cell(0, 6, sanitize_text("2. SYNTHESE DES RISQUES ET MOYENS DE PREVENTION"), 0, 1)
+    pdf.cell(0, 6, sanitize_text("2. SYNTHESE COMPLÈTE DES RISQUES ET PERMIS SPECIFIQUES"), 0, 1)
     pdf.set_font("Helvetica", "B", 8); pdf.set_fill_color(241, 245, 249)
     pdf.cell(60, 6, sanitize_text("Activite Cochee"), 1, 0, 'L', True)
     pdf.cell(65, 6, sanitize_text("Risque Identifie"), 1, 0, 'L', True)
-    pdf.cell(65, 6, sanitize_text("Moyens de Prevention / EPIs"), 1, 1, 'L', True)
+    pdf.cell(65, 6, sanitize_text("Moyens de Prevention / EPIs / Signatures"), 1, 1, 'L', True)
 
     pdf.set_font("Helvetica", "", 8)
     for r in permis.get("tableau_risques", []):
@@ -299,68 +288,38 @@ def generer_pdf_bytes(permis):
 
     pdf.ln(3)
     pdf.set_font("Helvetica", "B", 11)
-    pdf.cell(0, 6, sanitize_text("3. PERMIS SPECIFIQUES ET DEROGATIONS"), 0, 1)
-    pdf.set_font("Helvetica", "", 9)
-    spe_all = permis.get('permis_specifiques', []) + permis.get('derogations', [])
-    pdf.cell(0, 5, sanitize_text(" - " + (", ".join(spe_all) if spe_all else "Aucun permis specifique requis")), 0, 1)
-
-    pdf.ln(3)
-    pdf.set_font("Helvetica", "B", 11)
-    pdf.cell(0, 6, sanitize_text("4. SIGNATURES AUDITEES"), 0, 1)
+    pdf.cell(0, 6, sanitize_text("3. SIGNATURES AUDITEES DANS ePDP"), 0, 1)
     pdf.set_font("Helvetica", "", 8)
     for sign in permis.get("intervenants", []):
-        pdf.cell(0, 5, sanitize_text(f" [OK] Signature horodatee sur borne tactile : {sign}"), 1, 1)
+        pdf.cell(0, 5, sanitize_text(f" [OK] Signature horodatee intervenant : {sign}"), 1, 1)
 
     return bytes(pdf.output())
 
-# ---------------------------------------------------------
 # BARRE LATÉRALE
-# ---------------------------------------------------------
 st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/thumb/8/85/Procter_%26_Gamble_logo.svg/1024px-Procter_%26_Gamble_logo.svg.png", width=80)
 st.sidebar.title("e-Work Permit P&G")
 st.sidebar.caption("Site d'Amiens — Solution Unifiée")
 
-role = st.sidebar.radio(
-    "Interface à démontrer :",
-    ["🖥️ Borne Kiosk Tactile (EE / N2)", "📊 DDS Board & Batch 07h30 (DO / HSE)", "📱 Inspection Terrain QR Code (Casque Rouge)"]
-)
+role = st.sidebar.radio("Interface à démontrer :", ["🖥️ Borne Kiosk Tactile (EE / N2)", "📊 DDS Board & Batch 07h30 (DO / HSE)", "📱 Inspection Terrain QR Code (Casque Rouge)"])
 
 # ==============================================================================
 # INTERFACE 1 : BORNE KIOSK TACTILE (EE / N2)
 # ==============================================================================
 if role == "🖥️ Borne Kiosk Tactile (EE / N2)":
 
-    st.markdown("""
-    <div class="pg-header">
-        <h1 style='margin:0; font-size: 2.1rem;'>PROCTER & GAMBLE — AMIENS</h1>
-        <p style='margin:4px 0 0 0; opacity:0.85; font-size: 1.05rem;'>WORK PERMIT IT | BORNE TACTILE KIOSK</p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("<div class='pg-header'><h1 style='margin:0;'>PROCTER & GAMBLE — AMIENS</h1><p style='margin:0;'>WORK PERMIT IT | BORNE TACTILE KIOSK</p></div>", unsafe_allow_html=True)
 
     if st.session_state.kiosk_mode == "HOME":
         st.write("### Veuillez sélectionner votre démarche :")
-        st.write("")
         col_act1, col_act2 = st.columns(2)
         with col_act1:
-            st.markdown("<div class='welcome-card'><h2 style='color:#003366;'>🚀 Permis de Travail</h2><p>Émettre un nouveau Permis de Travail (STA, Check-list, EPIs normés & Signatures).</p></div>", unsafe_allow_html=True)
+            st.markdown("<div class='welcome-card'><h2 style='color:#003366;'>🚀 Permis de Travail</h2><p>Émettre un nouveau Permis de Travail complet.</p></div>", unsafe_allow_html=True)
             if st.button("🚀 COMMENCER UN PERMIS DE TRAVAIL", type="primary", use_container_width=True):
                 st.session_state.kiosk_mode = "PERMIS"; st.session_state.step = 1; st.rerun()
         with col_act2:
-            st.markdown("<div class='welcome-card'><h2 style='color:#003366;'>📝 Émargement PDP</h2><p>Émarger et signer un Plan de Prévention enregistré pour votre entreprise.</p></div>", unsafe_allow_html=True)
+            st.markdown("<div class='welcome-card'><h2 style='color:#003366;'>📝 Émargement PDP</h2><p>Émarger un Plan de Prévention.</p></div>", unsafe_allow_html=True)
             if st.button("📝 SIGNER UN PLAN DE PRÉVENTION (PDP)", use_container_width=True):
                 st.session_state.kiosk_mode = "PDP"; st.rerun()
-
-    elif st.session_state.kiosk_mode == "PDP":
-        if st.button("⬅️ Retour à l'accueil"): st.session_state.kiosk_mode = "HOME"; st.rerun()
-        st.subheader("📝 Émargement d'un Plan de Prévention (PDP)")
-        st.divider()
-        soc_pdp = st.selectbox("1. Sélectionnez votre Entreprise Extérieure (EE) :", db_societes)
-        pdp_sel = st.selectbox(f"2. Plans de Prévention enregistrés pour {soc_pdp} :", db_pdps.get(soc_pdp, ["Aucun PDP"]))
-        nom_pdp = st.text_input("Nom & Prénom de l'intervenant :")
-        statut_pdp = st.selectbox("Statut sur le chantier :", ["N1 (Compagnon)", "N2 (Responsable)"])
-        st.info(" [ Zone de Signature Tactile Empreinte / Stylet ] ")
-        if st.button("✅ VALIDER L'ÉMARGEMENT DU PDP", type="primary", use_container_width=True):
-            st.balloons(); st.success(f"Émargement validé pour {nom_pdp} !"); st.session_state.kiosk_mode = "HOME"
 
     elif st.session_state.kiosk_mode == "PERMIS":
         current_step = st.session_state.step
@@ -392,7 +351,7 @@ if role == "🖥️ Borne Kiosk Tactile (EE / N2)":
                 if st.button("Suivant ➔", type="primary"): st.session_state.step = 2; st.rerun()
 
         elif current_step == 2:
-            st.subheader(f"2. Plan de Prévention, Mode Opératoire & Règle de Sous-Traitance")
+            st.subheader("2. Plan de Prévention, Mode Opératoire & Règle de Sous-Traitance")
             p_list = db_pdps.get(st.session_state.form_data["societe"], ["PDP Standard"])
             st.session_state.form_data["pdp"] = st.selectbox("Plan de Prévention (PDP) rattaché :", p_list)
             
@@ -405,8 +364,8 @@ if role == "🖥️ Borne Kiosk Tactile (EE / N2)":
             st.session_state.form_data["is_subcontractor"] = mop_info.get("st", False)
 
             if st.session_state.form_data["is_subcontractor"]:
-                st.warning(f"⚠️ **Sous-traitance Détectée :** Ce Mode Opératoire identifie une intervention en sous-traitance pour la société **{mop_info.get('titulaire', 'ABYLSEN')}**.")
-                st.session_state.form_data["titulaire_n2"] = st.text_input("Nom & Prénom du Responsable N2 de la Société Titulaire du PDP :", value=mop_info.get('titulaire', 'ABYLSEN') + " - Représentant N2")
+                st.warning(f"⚠️ **RÈGLE DE SOUS-TRAITANCE DÉTECTÉE VIA PDP/MoP :** Cette intervention est réalisée par un sous-traitant de **{mop_info.get('titulaire', 'ABYLSEN')}**.")
+                st.session_state.form_data["titulaire_n2"] = st.text_input("Nom & Prénom du N2 de la Société Principale (Titulaire du PDP) obligatoire pour la signature finale :", value=mop_info.get('titulaire', 'ABYLSEN') + " - Responsable N2")
             else:
                 st.success("✅ Intervention directe par la société titulaire du PDP.")
 
@@ -421,7 +380,7 @@ if role == "🖥️ Borne Kiosk Tactile (EE / N2)":
             st.session_state.form_data["n2_nom"] = st.selectbox("Responsable N2 qualifié sur site :", db_n2)
             c_back, c_next = st.columns(2)
             with c_back:
-                if st.button("⬅️ Précédent"): st.session_state.step = 2; st.rerun()
+                if st.button("⬅️️ Précédent"): st.session_state.step = 2; st.rerun()
             with c_next:
                 if st.button("Suivant ➔", type="primary"): st.session_state.step = 4; st.rerun()
 
@@ -443,60 +402,22 @@ if role == "🖥️ Borne Kiosk Tactile (EE / N2)":
         elif current_step == 5:
             st.subheader("5. Check-list, Déclencheurs HRT & EPIs Normés P&G")
 
-            meteo_live = obtenir_meteo_amiens_live()
-            is_demain = st.session_state.form_data["date_str"] != datetime.date.today().strftime("%d/%m/%Y")
-            vitesse_vent = meteo_live["vent_j1"] if is_demain else meteo_live["vent_j0"]
-            temp_j = meteo_live["temp_max_j0"]
-
-            st.markdown(f"<div class='weather-card'>🌤️ <b>Météo Amiens :</b> {temp_j}°C | Vent : <b>{vitesse_vent} km/h</b> <i>({meteo_live['source']})</i></div>", unsafe_allow_html=True)
-
-            st.error("🚨 **Cochez les activités pour ouvrir les Permis Spécifiques (Étape 6) :**")
+            st.error("🚨 **Cochez les activités pour ouvrir les Permis Spécifiques à l'Étape 6 :**")
             c_rp1, c_rp2 = st.columns(2)
             with c_rp1:
-                st.session_state.form_data["p_hauteur"] = st.checkbox("Travail en hauteur / Échafaudage / Nacelle ➔ Permis Hauteur", value=st.session_state.form_data["p_hauteur"])
-                st.session_state.form_data["p_toiture"] = st.checkbox("Accès toiture ➔ Permis Accès Toiture", value=st.session_state.form_data["p_toiture"])
-                
-                if st.session_state.form_data.get("sta_meuleuse"):
-                    st.session_state.form_data["p_points_chauds"] = True
-                
-                st.session_state.form_data["p_points_chauds"] = st.checkbox("Génération de points chauds / flamme ➔ Permis Point Chaud", value=st.session_state.form_data["p_points_chauds"])
-                st.session_state.form_data["p_excavation"] = st.checkbox("Tranchée, BTP, Ouverture de sol ➔ Permis Excavation", value=st.session_state.form_data["p_excavation"])
-                st.session_state.form_data["p_grutage"] = st.checkbox("Grutage & Levage ➔ Permis Grutage", value=st.session_state.form_data["p_grutage"])
+                st.session_state.form_data["p_hauteur"] = st.checkbox("Travail en hauteur / Échafaudage / Nacelle", value=st.session_state.form_data["p_hauteur"])
+                st.session_state.form_data["p_toiture"] = st.checkbox("Accès toiture", value=st.session_state.form_data["p_toiture"])
+                st.session_state.form_data["p_points_chauds"] = st.checkbox("Génération de point chaud / flamme", value=st.session_state.form_data["p_points_chauds"])
+                st.session_state.form_data["p_excavation"] = st.checkbox("Tranchée, BTP, Ouverture de sol", value=st.session_state.form_data["p_excavation"])
+                st.session_state.form_data["p_grutage"] = st.checkbox("Grutage", value=st.session_state.form_data["p_grutage"])
 
             with c_rp2:
-                st.session_state.form_data["p_confine"] = st.checkbox("Espace confiné / Risque d'asphyxie ➔ Permis Espace Confiné", value=st.session_state.form_data["p_confine"])
-                st.session_state.form_data["p_electrique"] = st.checkbox("Travail électrique / Voisinage ➔ Permis Travail Électrique", value=st.session_state.form_data["p_electrique"])
-                
-                loto_trigger = st.checkbox("Ouverture circuit sous pression / Machines en mouvement / Équipement sous pression / Laser IV ➔ Permis Consignation (LOTO)", value=st.session_state.form_data["p_consignation"])
-                st.session_state.form_data["p_consignation"] = loto_trigger
-                
-                sr_trigger = st.checkbox("Risque chimique particulier / Zone ATEX / Fluides dangereux ➔ Permis Systèmes à Risques", value=st.session_state.form_data["p_systeme_risque"])
-                st.session_state.form_data["p_systeme_risque"] = sr_trigger
-                if sr_trigger: st.session_state.form_data["p_consignation"] = True
-
-            st.divider()
-
-            # Verrouillages EPIs Automatiques
-            if st.session_state.form_data["p_hauteur"] or st.session_state.form_data["p_toiture"]:
-                st.session_state.form_data["epi_casque_jugulaire"] = True
-            if st.session_state.form_data["p_electrique"]:
-                st.session_state.form_data["epi_gants_electrique"] = True
-            if st.session_state.form_data["p_points_chauds"]:
-                st.session_state.form_data["epi_visiere_idra"] = True; st.session_state.form_data["epi_gants_coupure"] = True
-
-            st.write("##### 🥽 Équipements de Protection Individuelle (EPIs Normés P&G)")
-            ce1, ce2, ce3, ce4 = st.columns(4)
-            with ce1:
-                st.session_state.form_data["epi_lunettes_chantier_visiere"] = st.checkbox("Lunettes EN 166", value=st.session_state.form_data["epi_lunettes_chantier_visiere"])
-                st.session_state.form_data["epi_visiere_idra"] = st.checkbox("Écran facial EN 166B", value=st.session_state.form_data["epi_visiere_idra"])
-            with ce2:
-                st.session_state.form_data["epi_casque_jugulaire"] = st.checkbox("Casque Jugulaire EN 397", value=st.session_state.form_data["epi_casque_jugulaire"])
-                st.session_state.form_data["epi_bouchons_moules"] = st.checkbox("Bouchons moulés", value=st.session_state.form_data["epi_bouchons_moules"])
-            with ce3:
-                st.session_state.form_data["epi_gants_coupure"] = st.checkbox("Gants anti-coupure 4543", value=st.session_state.form_data["epi_gants_coupure"])
-                st.session_state.form_data["epi_gants_electrique"] = st.checkbox("Gants électriques EN 60903", value=st.session_state.form_data["epi_gants_electrique"])
-            with ce4:
-                st.session_state.form_data["epi_cartouche_abek"] = st.checkbox("Masque Cartouche ABEK", value=st.session_state.form_data["epi_cartouche_abek"])
+                st.session_state.form_data["p_confine"] = st.checkbox("Espace confiné", value=st.session_state.form_data["p_confine"])
+                st.session_state.form_data["p_electrique"] = st.checkbox("Travail électrique", value=st.session_state.form_data["p_electrique"])
+                st.session_state.form_data["p_consignation"] = st.checkbox("Ouverture circuit sous pression / Machines en mouvement / Équipement sous pression / Laser IV", value=st.session_state.form_data["p_consignation"])
+                st.session_state.form_data["p_systeme_risque"] = st.checkbox("Risque chimique particulier / Zone ATEX / Fluides dangereux", value=st.session_state.form_data["p_systeme_risque"])
+                if st.session_state.form_data["p_systeme_risque"]:
+                    st.session_state.form_data["p_consignation"] = True
 
             c_back, c_next = st.columns(2)
             with c_back:
@@ -504,287 +425,587 @@ if role == "🖥️ Borne Kiosk Tactile (EE / N2)":
             with c_next:
                 if st.button("Suivant ➔", type="primary"): st.session_state.step = 6; st.rerun()
 
-        # =====================================================
-        # ÉTAPE 6 : FORMULAIRES DÉTAILLÉS SELON L'ARBORESCENCE LOGIQUE
-        # =====================================================
+        # ==============================================================================
+        # ÉTAPE 6 : FORMULAIRES SPÉCIFIQUES - SANS AUCUNE OMISSION NI SKIP
+        # ==============================================================================
         elif current_step == 6:
-            st.subheader("6. Formulaires Spécifiques (HRT) & Règles Métier")
-            has_spe = False
+            st.subheader("6. Formulaires des Permis Spécifiques (Déroulement 100% Exhaustif)")
 
-            # --- 1. TRAVAIL EN HAUTEUR / NACELLE / ÉCHAFAUDAGE ---
+            # ---------------------------------------------------------
+            # 1. PERMIS TRAVAIL EN HAUTEUR / ÉCHAFAUDAGE / NACELLE
+            # ---------------------------------------------------------
             if st.session_state.form_data["p_hauteur"]:
-                has_spe = True
                 st.error("🧗 **PERMIS TRAVAIL EN HAUTEUR / ÉCHAFAUDAGE / NACELLE**")
-                st.info("🔒 **EPI Obligatoire :** Casque avec jugulaire (EN 397) verrouillé automatiquement.")
+                st.info("🥽 **EPI IMPOSÉ DE BASE :** Casque avec jugulaire obligatoire.")
 
-                ch1, ch2, ch3 = st.columns(3)
-                with ch1:
-                    st.session_state.form_data["h_pirl"] = st.checkbox("PIRL (Gazelle)", value=st.session_state.form_data["h_pirl"])
-                    if st.session_state.form_data["h_pirl"]:
-                        st.session_state.form_data["h_pirl_vgp"] = st.checkbox("VGP + Contrôle visuel avant utilisation", value=True)
-                        st.session_state.form_data["h_pirl_soc"] = st.text_input("Société propriétaire PIRL :", value=st.session_state.form_data["societe"])
-                
-                with ch2:
-                    st.session_state.form_data["h_nacelle"] = st.checkbox("Nacelle (PEMP)", value=st.session_state.form_data["h_nacelle"])
-                    if st.session_state.form_data["h_nacelle"]:
-                        st.session_state.form_data["h_nacelle_vgp"] = st.checkbox("VGP + Check-list journalière", value=True)
-                        st.session_state.form_data["h_nacelle_caces"] = st.checkbox("CACES R486 (Utilisateur & Vigie sol)", value=True)
-                        st.session_state.form_data["h_nacelle_aut"] = st.checkbox("Autorisation de conduite employeur", value=True)
-                        st.session_state.form_data["h_nacelle_harnais"] = st.checkbox("Qualification Hauteur (Port du Harnais)", value=True)
-                        st.warning("🦺 **EPI Nacelle requis :** Harnais anti-chute + Longe courte d'assujettissement.")
+                st.write("##### Sélection du matériel utilisé :")
+                st.session_state.form_data["h_pirl"] = st.checkbox("PIRL", value=st.session_state.form_data["h_pirl"])
+                if st.session_state.form_data["h_pirl"]:
+                    c_p1, c_p2 = st.columns(2)
+                    with c_p1: st.session_state.form_data["h_pirl_vgp"] = st.checkbox("VGP + contrôle visuel avant utilisation", value=st.session_state.form_data["h_pirl_vgp"])
+                    with c_p2: st.session_state.form_data["h_pirl_soc"] = st.text_input("Identification par le nom de la société (PIRL) :", value=st.session_state.form_data["h_pirl_soc"])
 
-                with ch3:
-                    st.session_state.form_data["h_echaf"] = st.checkbox("Échafaudage", value=st.session_state.form_data["h_echaf"])
-                    if st.session_state.form_data["h_echaf"]:
-                        st.session_state.form_data["h_echaf_type"] = st.radio("Type d'intervention Échafaudage :", ["Montage / Démontage / Modification", "Utilisation simple"])
-                        if "Montage" in st.session_state.form_data["h_echaf_type"]:
-                            st.session_state.form_data["h_echaf_montage_qualif"] = st.checkbox("Qualification spécifique Montage Échafaudage", value=True)
-                            st.error("🦺 **EPIs Montage :** Harnais + Double longe + Connecteurs MGO + Absorbeur + Gants.")
-                        else:
-                            st.session_state.form_data["h_echaf_util_qualif"] = st.checkbox("Qualification utilisation & inspection", value=True)
-                            st.session_state.form_data["h_echaf_util_certif"] = st.checkbox("Certificat de montage affiché (Panneau Vert)", value=True)
-                            st.session_state.form_data["h_echaf_util_verif_j"] = st.checkbox("Vérification journalière par société utilisatrice", value=True)
+                st.session_state.form_data["h_nacelle"] = st.checkbox("Nacelle", value=st.session_state.form_data["h_nacelle"])
+                if st.session_state.form_data["h_nacelle"]:
+                    st.warning("🥽 **EPI NACELLE OBLIGATOIRE :** Harnais + Longe")
+                    cn1, cn2 = st.columns(2)
+                    with cn1:
+                        st.session_state.form_data["h_nacelle_vgp"] = st.checkbox("VGP + Check list journalière", value=st.session_state.form_data["h_nacelle_vgp"])
+                        st.session_state.form_data["h_nacelle_caces"] = st.checkbox("CACES pour utilisateur et vigie", value=st.session_state.form_data["h_nacelle_caces"])
+                        st.session_state.form_data["h_nacelle_aut"] = st.checkbox("Autorisation de conduite", value=st.session_state.form_data["h_nacelle_aut"])
+                    with cn2:
+                        st.session_state.form_data["h_nacelle_harnais"] = st.checkbox("Qualification pour le travail en hauteur (port du harnais)", value=st.session_state.form_data["h_nacelle_harnais"])
+                        st.session_state.form_data["h_nacelle_soc"] = st.text_input("Identification par le nom de la société (Nacelle) :", value=st.session_state.form_data["h_nacelle_soc"])
+
+                st.session_state.form_data["h_echaf"] = st.checkbox("Échafaudage", value=st.session_state.form_data["h_echaf"])
+                if st.session_state.form_data["h_echaf"]:
+                    ce1, ce2 = st.columns(2)
+                    with ce1:
+                        st.session_state.form_data["h_echaf_montage"] = st.checkbox("Montage / Démontage / Modification", value=st.session_state.form_data["h_echaf_montage"])
+                        if st.session_state.form_data["h_echaf_montage"]:
+                            st.checkbox("Qualification de montage d'échafaudage", value=True)
+                            st.checkbox("Qualification pour le travail en hauteur (port du harnais)", value=True)
+                            st.error("🥽 **EPI MONTAGE :** Harnais + double longe + Connecteurs + absorbeurs ou stop chute + gants")
+
+                    with ce2:
+                        st.session_state.form_data["h_echaf_util"] = st.checkbox("Utilisation d'échafaudage", value=st.session_state.form_data["h_echaf_util"])
+                        if st.session_state.form_data["h_echaf_util"]:
+                            st.checkbox("Qualification d'utilisation et d'inspection d'échafaudage", value=True)
+
+                    st.session_state.form_data["h_echaf_ctrl_regle"] = st.checkbox("Contrôle périodique réglementaire", value=st.session_state.form_data["h_echaf_ctrl_regle"])
+                    st.session_state.form_data["h_echaf_certif_affiche"] = st.checkbox("Certificat de montage affiché", value=st.session_state.form_data["h_echaf_certif_affiche"])
+                    st.session_state.form_data["h_echaf_verif_j"] = st.checkbox("Vérification journalière par société", value=st.session_state.form_data["h_echaf_verif_j"])
+                    st.session_state.form_data["h_echaf_soc_util"] = st.text_input("Identification de la société utilisatrice (Échafaudage) :", value=st.session_state.form_data["h_echaf_soc_util"])
                 st.divider()
 
-            # --- 2. ACCÈS TOITURE ---
+            # ---------------------------------------------------------
+            # 2. PERMIS ACCÈS TOITURE
+            # ---------------------------------------------------------
             if st.session_state.form_data["p_toiture"]:
-                has_spe = True
                 st.error("🏢 **PERMIS ACCÈS TOITURE**")
-                st.info(f"📍 **Localisation Toiture :** `{st.session_state.form_data['lieu_pdp']}` ({st.session_state.form_data['lieu_precision']})")
+                st.info("🥽 **EPI IMPOSÉ DE BASE :** Casque avec jugulaire obligatoire.")
+                st.info(f"📍 **Localisation gardée en mémoire :** `{st.session_state.form_data['lieu_pdp']}` ({st.session_state.form_data['lieu_precision']})")
+
+                st.session_state.form_data["toiture_protection"] = st.selectbox(
+                    "Identifier les moyens de protection de la zone (ex : garde-corps) :",
+                    ["Garde-corps permanents peripheriques", "Protection temporaire / Ligne de vie", "Aucune protection fixe"]
+                )
                 
+                if "Aucune" in st.session_state.form_data["toiture_protection"] or "temporaire" in st.session_state.form_data["toiture_protection"]:
+                    st.warning("🥽 **ADAPTATION EPIs :** Harnais + système d'arrêt de chute si < 3m du bord + Signalisation physique des 3m du bord.")
+
                 meteo_live = obtenir_meteo_amiens_live()
-                vent_actuel = meteo_live["vent_j0"]
-                temp_actuelle = meteo_live["temp_max_j0"]
+                st.write("##### Flag des conditions météos :")
                 
-                # Contrôle strict Météo Toiture
-                refus_meteo = False
-                motif_refus = ""
+                temp_val = meteo_live["temp_max_j0"]
+                vent_val = meteo_live["vent_j0"]
                 
-                if temp_actuelle < 3 or temp_actuelle > 30:
-                    refus_meteo = True; motif_refus = f"Température extrême ({temp_actuelle}°C, hors plage 3°C - 30°C)"
-                elif vent_actuel > 36:
-                    refus_meteo = True; motif_refus = f"Rafales de vent supérieures au seuil ({vent_actuel} km/h > 36 km/h)"
+                refus = False
+                reasons = []
+
+                if temp_val < 3 or temp_val > 30:
+                    refus = True; reasons.append(f"Température ({temp_val}°C < 3°C ou > 30°C)")
+                if vent_val > 36:
+                    refus = True; reasons.append(f"Vent ({vent_val} km/h > 36 km/h)")
                 
-                if refus_meteo:
-                    st.error(f"❌ **ACCÈS TOITURE REFUSÉ PAR LE SYSTÈME :** {motif_refus}")
+                chk_orage = st.checkbox("Orage prévu ou en cours", value=False)
+                chk_pluie = st.checkbox("Pluie battante prévue", value=False)
+
+                if chk_orage: refus = True; reasons.append("Orage prévu")
+                if chk_pluie: refus = True; reasons.append("Pluie battante prévue")
+
+                if refus:
+                    st.error(f"❌ **ACCÈS REFUSÉ POUR CAUSE DE CONDITIONS MÉTÉOROLOGIQUES :** {', '.join(reasons)}")
                 else:
-                    st.success(f"✅ **Conditions Météo Favorables :** Température {temp_actuelle}°C | Vent {vent_actuel} km/h (< 30 km/h)")
-                    st.warning("⚠️ **Rappel Réglementaire P&G :** Accès à DEUX personnes impérativement. Un intervenant ne doit JAMAIS rester seul sur la toiture.")
-                    
-                    st.session_state.form_data["toiture_protection"] = st.selectbox(
-                        "Identifier les moyens de protection de la zone :",
-                        ["Garde-corps permanents périphériques (Protection Passive)", "Zone à moins de 3m du bord (Harnais + Longe d'arrêt de chute obligatoire)", "Ligne de vie conforme EN 795"]
-                    )
-                    st.session_state.form_data["toiture_valideur"] = st.text_input("Personne habilitée ePDP à valider l'accès toiture :", value=st.session_state.form_data["toiture_valideur"])
+                    if 30 <= vent_val <= 36:
+                        st.warning(f"⚠️ **Vigilance Météo Vent :** {vent_val} km/h (seuil limite à 36 km/h)")
+                    st.success("✅ **CONDITIONS FAVORABLES**")
+                    st.info("📣 **Rappel des conditions :** Accès à deux personnes impérativement - un intervenant ne doit jamais rester seul sur la toiture.")
+                    st.session_state.form_data["toiture_valideur"] = st.text_input("Validation de l'accès toiture par une personne habilitée à signer les accès toiture (ePDP) :", value=st.session_state.form_data["toiture_valideur"])
                 st.divider()
 
-            # --- 3. PERMIS POINT CHAUD ---
+            # ---------------------------------------------------------
+            # 3. PERMIS POINT CHAUD / FLAMME
+            # ---------------------------------------------------------
             if st.session_state.form_data["p_points_chauds"]:
-                has_spe = True
-                st.warning("🔥 **PERMIS POINT CHAUD / FLAMME / MEULAGE**")
+                st.warning("🔥 **PERMIS POINT CHAUD / FLAMME**")
+                st.info("🥽 **EPI de base Point Chaud :** Écran facial contre les projections chaudes (EN166B) ou cagoule si soudures + Vêtements ignifugés.")
                 
-                carto = db_zones_carto.get(st.session_state.form_data["lieu_pdp"], {})
-                st.info(f"<b>Détection automatique des moyens d'extinction de la zone :</b> Sprinklers: `{carto.get('sprinkler')}` | Détection Fumée: `{carto.get('detection')}`", unsafe_allow_html=True)
-                
-                if not carto.get('sprinkler') or not carto.get('detection'):
-                    st.error("🚨 **Surveillance P&G de 60 minutes SUPPLÉMENTAIRE obligatoire** après les 60 min de surveillance de l'Entreprise Extérieure (Zone sans sprinkler/détection automatique).")
-
-                st.session_state.form_data["chaud_gants_type"] = st.selectbox("Sélection des gants Point Chaud obligatoires :", ["Gants de Soudeur Croûte de Cuir (EN 12477)", "Gants résistant à la chaleur de contact", "Gants anti-coupure 4543 pour meulage"])
-                
-                c_ext1, c_ext2 = st.columns(2)
-                with c_ext1: st.session_state.form_data["chaud_extincteur1"] = st.selectbox("Extincteur 1 sur zone :", ["Eau + Additif 6L", "Poudre ABC 6kg", "CO2 5kg"])
-                with c_ext2: st.session_state.form_data["chaud_extincteur2"] = st.selectbox("Extincteur 2 sur zone :", ["CO2 5kg", "Eau + Additif 6L", "Poudre ABC 6kg"])
-
-                st.session_state.form_data["chaud_degage_10m"] = st.checkbox("Zone dégagée de tout combustible sur un rayon de 10m", value=st.session_state.form_data["chaud_degage_10m"])
-                if not st.session_state.form_data["chaud_degage_10m"]:
-                    st.error("🔒 **Protection requise :** Installation obligatoire de bâches/couvertures ignifugées M0 sur les matériaux restants.")
-
-                st.session_state.form_data["chaud_traverse_mur"] = st.checkbox("Les travaux traversent une paroi ou un mur", value=st.session_state.form_data["chaud_traverse_mur"])
-                if st.session_state.form_data["chaud_traverse_mur"]:
-                    st.error("🔒 **Vigie secondaire obligatoire de l'autre côté du mur.**")
-
-                st.session_state.form_data["chaud_vigie_nom"] = st.selectbox("Désignation de la Vigie du Point Chaud (signataire du MoP) :", st.session_state.form_data["intervenants"])
-                
-                c_h1, c_h2 = st.columns(2)
-                with c_h1: st.session_state.form_data["chaud_heure_fin"] = st.text_input("Heure de fin des travaux à chaud :", value="15:00")
-                with c_h2: st.session_state.form_data["chaud_heure_fin_ronde"] = st.text_input("Heure de fin de la ronde de surveillance (1h minimum post-chauffe) :", value="16:00")
-                st.divider()
-
-            # --- 4. EXCAVATION / TRANCHÉE ---
-            if st.session_state.form_data["p_excavation"]:
-                has_spe = True
-                st.warning("🚜 **PERMIS EXCAVATION / TRANCHÉE / OUVERTURE DE SOL**")
-                
-                st.markdown("##### 1. Risques liés aux réseaux souterrains (Connaissance des plans)")
-                ce_r1, ce_r2, ce_r3, ce_r4 = st.columns(4)
-                with ce_r1:
-                    st.session_state.form_data["excav_plans_eaux_indus"] = st.checkbox("Eaux Indu. / Potable", value=True)
-                    st.session_state.form_data["excav_plans_eaux_usees"] = st.checkbox("Eaux Usées", value=True)
-                with ce_r2:
-                    st.session_state.form_data["excav_plans_eaux_pluv"] = st.checkbox("Eaux Pluviales", value=True)
-                    st.session_state.form_data["excav_plans_eaux_incendie"] = st.checkbox("Eaux Incendie", value=True)
-                with ce_r3:
-                    st.session_state.form_data["excav_plans_ht"] = st.checkbox("Haute Tension", value=True)
-                    st.session_state.form_data["excav_plans_bt"] = st.checkbox("Basse Tension", value=True)
-                with ce_r4:
-                    st.session_state.form_data["excav_plans_gaz"] = st.checkbox("Gaz Naturel", value=True)
-                    st.session_state.form_data["excav_dict"] = st.checkbox("DICT émise et validée", value=True)
-
-                st.markdown("##### 2. Prévention des Effondrements & Accès")
-                st.session_state.form_data["excav_acces_type"] = st.selectbox("Moyens d'accès à la tranchée :", ["Escalier / Rampe amagée", "Échelle (Déclencher Dérogation Casque Rouge)", "Passerelle avec garde-corps"])
-                if "Échelle" in st.session_state.form_data["excav_acces_type"]:
-                    st.warning("⚠️ **Dérogation Casque Rouge activée :** Utilisation d'une échelle d'accès en excavation.")
-
-                st.session_state.form_data["excav_profondeur_130"] = st.checkbox("Profondeur de la tranchée > 1,30 m", value=st.session_state.form_data["excav_profondeur_130"])
-                if st.session_state.form_data["excav_profondeur_130"]:
-                    st.error("🔒 **BLINDAGE OU TALUTAGE STRICTEMENT OBLIGATOIRE (Profondeur > 1,30m).**")
-
-                st.info("✍️ **3 Signatures Obligatoires :** Chef de Manœuvre EE + Donneur d'Ordre P&G + Casque Rouge (Obligatoire avant démarrage).")
-                st.divider()
-
-            # --- 5. PERMIS GRUTAGE & LEVAGE ---
-            if st.session_state.form_data["p_grutage"]:
-                has_spe = True
-                st.info("🏗️ **PERMIS GRUTAGE & OPÉRATIONS DE LEVAGE**")
-                
+                st.write("##### Choix des gants (Au moins 1 obligatoire) :")
                 cg1, cg2, cg3 = st.columns(3)
-                with cg1: st.session_state.form_data["grut_poids_charge"] = st.number_input("Poids de la charge :", value=2500.0)
-                with cg2: st.session_state.form_data["grut_poids_acc"] = st.number_input("Poids des accessoires (élingues/manilles) :", value=200.0)
-                with cg3: st.session_state.form_data["grut_unite"] = st.selectbox("Unité de poids :", ["kg", "Tonnes"])
+                with cg1: st.session_state.form_data["chaud_gants_soudeur"] = st.checkbox("Gants soudeur", value=st.session_state.form_data["chaud_gants_soudeur"])
+                with cg2: st.session_state.form_data["chaud_gants_chaleur"] = st.checkbox("Gants résistant à la chaleur", value=st.session_state.form_data["chaud_gants_chaleur"])
+                with cg3: st.session_state.form_data["chaud_gants_anticoupure"] = st.checkbox("Gants anti-coupure", value=st.session_state.form_data["chaud_gants_anticoupure"])
 
-                poids_tot = st.session_state.form_data["grut_poids_charge"] + st.session_state.form_data["grut_poids_acc"]
-                st.write(f"⚖️ **Poids Total Calculé à gruter :** `{poids_tot} {st.session_state.form_data['grut_unite']}`")
+                carto = db_zones_carto.get(st.session_state.form_data["lieu_pdp"], {})
+                st.write("##### Détection automatique des moyens de lutte contre l'incendie de la zone :")
+                st.write(f"- Présence de sprinklers en fonctionnement ? **{'OUI' if carto.get('sprinkler') else 'NON'}**")
+                if not carto.get('sprinkler'):
+                    st.error("🚨 **NON :** Surveillance par P&G de 60 minutes supplémentaire après la surveillance de l'EE : clôture du permis quand l'heure de surveillance est passée + commentaire")
 
-                st.session_state.form_data["grut_dispo_pesage"] = st.checkbox("Dispositif de mesure de charge sur grue", value=True)
-                seuil_max = 0.90 if st.session_state.form_data["grut_dispo_pesage"] else 0.80
-                st.caption(f"Seuil maximal toléré de la capacité grue : **{int(seuil_max*100)}%**")
+                st.write(f"- Présence de détection de fumée ? **{'OUI' if carto.get('detection') else 'NON'}**")
+                if not carto.get('detection'):
+                    st.error("🚨 **NON :** Surveillance par P&G de 60 minutes supplémentaire après la surveillance de l'EE")
 
-                meteo_live = obtenir_meteo_amiens_live()
-                if meteo_live["vent_j0"] > 36:
-                    st.error(f"❌ **VENT SUPÉRIEUR À 36 km/h ({meteo_live['vent_j0']} km/h) : LE PERMIS GRUTAGE EST BLOQUÉ PAR LE SYSTÈME.**")
+                cext1, cext2 = st.columns(2)
+                with cext1: st.session_state.form_data["chaud_extincteur1"] = st.selectbox("Type du 1er extincteur présent sur zone :", ["Poudre ABC", "Eau + additifs", "CO2"])
+                with cext2: st.session_state.form_data["chaud_extincteur2"] = st.selectbox("Type du 2ème extincteur présent sur zone :", ["CO2", "Eau + additifs", "Poudre ABC"])
 
-                st.info("✍️ **Signatures Automatiques requis :** Chef de Manœuvre + Élingueur + Grutier + DO P&G + Casque Rouge.")
+                st.session_state.form_data["chaud_degage_10m"] = st.checkbox("La zone est dégagée de tous matériaux combustibles sur un rayon de 10m", value=st.session_state.form_data["chaud_degage_10m"])
+                if not st.session_state.form_data["chaud_degage_10m"]:
+                    st.error("🔒 **NON :** Installation de bâches ignifugées obligatoire.")
+
+                st.session_state.form_data["chaud_traverse_mur"] = st.checkbox("Les travaux traversent-ils une paroi ou un mur ?", value=st.session_state.form_data["chaud_traverse_mur"])
+                if st.session_state.form_data["chaud_traverse_mur"]:
+                    st.error("🔒 **OUI :** Vigie en place de l'autre côté du mur.")
+
+                st.session_state.form_data["chaud_ouverture_10m"] = st.checkbox("Les travaux se trouvent à moins de 10m d'une ouverture ou de planchers ?", value=st.session_state.form_data["chaud_ouverture_10m"])
+                if st.session_state.form_data["chaud_ouverture_10m"]:
+                    st.write("Mesure d'atténuation choisie :")
+                    st.session_state.form_data["chaud_obstruction"] = st.checkbox("Obstruction des ouvertures", value=True)
+                    st.session_state.form_data["chaud_vigie_autre_cote"] = st.checkbox("Vigie de l'autre côté", value=False)
+
+                st.session_state.form_data["chaud_vigie_nom"] = st.selectbox("Désignation d'un intervenant parmi ceux qui ont signé le mode opératoire en vigie du travail :", st.session_state.form_data["intervenants"])
+                st.session_state.form_data["chaud_personne_surv_60m"] = st.selectbox("Personne réalisant la surveillance 60 minutes après le travail :", st.session_state.form_data["intervenants"])
+
+                chf1, chf2 = st.columns(2)
+                with chf1: st.session_state.form_data["chaud_heure_fin"] = st.text_input("Heure de fin du travail à chaud :", value=st.session_state.form_data["chaud_heure_fin"])
+                with chf2: st.session_state.form_data["chaud_heure_depart"] = st.text_input("Heure de départ (après heure de surveillance passed) :", value=st.session_state.form_data["chaud_heure_depart"])
+                st.session_state.form_data["chaud_commentaires"] = st.text_area("Commentaire de clôture permis point chaud :", value=st.session_state.form_data["chaud_commentaires"])
                 st.divider()
 
-            # --- 6. PERMIS ESPACE CONFINÉ ---
+            # ---------------------------------------------------------
+            # 4. PERMIS EXCAVATION / TRANCHÉE / OUVERTURE DE SOL
+            # ---------------------------------------------------------
+            if st.session_state.form_data["p_excavation"]:
+                st.warning("🚜 **PERMIS EXCAVATION / TRANCHÉE / BTP**")
+                
+                st.write("##### Risques liés aux réseaux souterrains — Connaissance des plans :")
+                cx1, cx2, cx3, cx4 = st.columns(4)
+                with cx1:
+                    st.session_state.form_data["excav_plans_eaux_indus"] = st.checkbox("Eaux industrielle et potable", value=st.session_state.form_data["excav_plans_eaux_indus"])
+                    st.session_state.form_data["excav_plans_eaux_usees"] = st.checkbox("Eaux usées", value=st.session_state.form_data["excav_plans_eaux_usees"])
+                with cx2:
+                    st.session_state.form_data["excav_plans_eaux_pluv"] = st.checkbox("Eaux pluviales", value=st.session_state.form_data["excav_plans_eaux_pluv"])
+                    st.session_state.form_data["excav_plans_eaux_incendie"] = st.checkbox("Eaux incendie", value=st.session_state.form_data["excav_plans_eaux_incendie"])
+                with cx3:
+                    st.session_state.form_data["excav_plans_ht"] = st.checkbox("Haute tension", value=st.session_state.form_data["excav_plans_ht"])
+                    st.session_state.form_data["excav_plans_bt"] = st.checkbox("Basse tension", value=st.session_state.form_data["excav_plans_bt"])
+                with cx4:
+                    st.session_state.form_data["excav_plans_gaz"] = st.checkbox("Gaz", value=st.session_state.form_data["excav_plans_gaz"])
+
+                st.write("##### Risques liés à l'environnement :")
+                ceenv1, ceenv2, ceenv3 = st.columns(3)
+                with ceenv1: st.session_state.form_data["excav_struct_proximite"] = st.checkbox("Proximité d'éléments structurels (rack, fondation...)", value=st.session_state.form_data["excav_struct_proximite"])
+                with ceenv2: st.session_state.form_data["excav_architecte"] = st.checkbox("Architecte consulté", value=st.session_state.form_data["excav_architecte"])
+                with ceenv3: st.session_state.form_data["excav_dict"] = st.checkbox("DICT émise", value=st.session_state.form_data["excav_dict"])
+
+                st.write("##### Risques liés à l'effondrement :")
+                ceeff1, ceeff2 = st.columns(2)
+                with ceeff1:
+                    st.session_state.form_data["excav_eau_pompe"] = st.checkbox("Présence d'eau, utilisation d'une pompe de relevage", value=st.session_state.form_data["excav_eau_pompe"])
+                    st.session_state.form_data["excav_balisage"] = st.checkbox("Balisage et dégagement de la zone", value=st.session_state.form_data["excav_balisage"])
+                with ceeff2:
+                    st.session_state.form_data["excav_vehicule_3m"] = st.checkbox("Placement des véhicules à plus de 3 mètres", value=st.session_state.form_data["excav_vehicule_3m"])
+                    st.session_state.form_data["excav_deblais"] = st.checkbox("Dépose des déblais identifiée et communiquée", value=st.session_state.form_data["excav_deblais"])
+
+                st.session_state.form_data["excav_acces"] = st.selectbox("Moyens d'accès à la tranchée :", ["Escalier / Rampe", "Échelle", "Passerelle"])
+                if st.session_state.form_data["excav_acces"] == "Échelle":
+                    st.error("🚨 **Si échelle -> Dérogation casque rouge obligatoire.**")
+
+                st.session_state.form_data["excav_profondeur_130"] = st.checkbox("Profondeur de la tranchée > 1,30m", value=st.session_state.form_data["excav_profondeur_130"])
+                if st.session_state.form_data["excav_profondeur_130"]:
+                    st.error("🔒 **Si OUI : Blindage obligatoire.**")
+
+                st.session_state.form_data["excav_schema_commentaires"] = st.text_area("Champ libre pour faire schéma de l'excavation ou commentaires :", value=st.session_state.form_data["excav_schema_commentaires"])
+
+                st.write("##### 3 signatures obligatoires pour l'excavation :")
+                st.session_state.form_data["excav_chef_manoeuvre"] = st.text_input("1. Chef de manœuvre de la société extérieure :", value=st.session_state.form_data["excav_chef_manoeuvre"])
+                st.session_state.form_data["excav_do"] = st.text_input("2. Le donneur d'ordre (après celle-ci début d'installation autorisé) :", value=st.session_state.form_data["excav_do"])
+                st.session_state.form_data["excav_casque_rouge"] = st.text_input("3. Le casque rouge (obligatoire pour commencer l'intervention) :", value=st.session_state.form_data["excav_casque_rouge"])
+                st.divider()
+
+            # ---------------------------------------------------------
+            # 5. PERMIS GRUTAGE
+            # ---------------------------------------------------------
+            if st.session_state.form_data["p_grutage"]:
+                st.info("🏗️ **PERMIS GRUTAGE**")
+                
+                st.write("##### Description du matériel et de la charge :")
+                st.session_state.form_data["grut_desc_mop"] = st.text_area("Description de la charge (MOP) ou texte libre :", value=st.session_state.form_data["grut_desc_mop"])
+                
+                cg1, cg2 = st.columns(2)
+                with cg1: st.session_state.form_data["grut_poids_charge"] = st.number_input("Poids de la charge :", value=st.session_state.form_data["grut_poids_charge"])
+                with cg2: st.session_state.form_data["grut_unite"] = st.selectbox("Unité poids charge et accessoires :", ["kg", "T"])
+
+                st.session_state.form_data["grut_poids_acc"] = st.number_input(f"Poids des accessoires (dans la même unité : {st.session_state.form_data['grut_unite']}) :", value=st.session_state.form_data["grut_poids_acc"])
+                poids_tot = st.session_state.form_data["grut_poids_charge"] + st.session_state.form_data["grut_poids_acc"]
+                st.write(f"⚖️ **Poids total = Poids de la charge + Poids des accessoires :** `{poids_tot} {st.session_state.form_data['grut_unite']}`")
+
+                st.write("##### Matériels :")
+                cmat1, cmat2, cmat3 = st.columns(3)
+                with cmat1: st.session_state.form_data["grut_immat"] = st.text_input("Identification de la grue (immatriculation) :", value=st.session_state.form_data["grut_immat"])
+                with cmat2: st.session_state.form_data["grut_fleche"] = st.number_input("Hauteur de flèche à la charge max (m) :", value=st.session_state.form_data["grut_fleche"])
+                with cmat3: st.session_state.form_data["grut_portee"] = st.number_input("Portée maximale pour la charge max (m) :", value=st.session_state.form_data["grut_portee"])
+
+                cmat4, cmat5 = st.columns(2)
+                with cmat4: st.session_state.form_data["grut_pression_patin"] = st.text_input("Pression maximale sur patin :", value=st.session_state.form_data["grut_pression_patin"])
+                with cmat5: st.session_state.form_data["grut_rayon"] = st.number_input("Rayon de grutage (m) :", value=st.session_state.form_data["grut_rayon"])
+
+                st.write("##### Organisation du levage :")
+                st.session_state.form_data["grut_balisage"] = st.checkbox("Balisage de la zone conforme au plan de grutage", value=st.session_state.form_data["grut_balisage"])
+                st.session_state.form_data["grut_plan_vue"] = st.checkbox("Plan de grutage vue en plan avec zone de survol interdite (MOP)", value=st.session_state.form_data["grut_plan_vue"])
+                st.session_state.form_data["grut_plan_elev"] = st.checkbox("Plan de grutage en élévation (MOP)", value=st.session_state.form_data["grut_plan_elev"])
+                st.session_state.form_data["grut_obstacles"] = st.checkbox("Identification des obstacles ou lignes électriques conforme au plan de grutage", value=st.session_state.form_data["grut_obstacles"])
+
+                st.write("##### Anémomètre & Vent :")
+                st.session_state.form_data["grut_anemometre"] = st.checkbox("Anémomètre en bout de flèche", value=st.session_state.form_data["grut_anemometre"])
+                cv1, cv2 = st.columns(2)
+                with cv1: st.session_state.form_data["grut_vent_val"] = st.number_input("Vérification via grutier/anémomètre (valeur) :", value=st.session_state.form_data["grut_vent_val"])
+                with cv2: st.session_state.form_data["grut_vent_unite"] = st.selectbox("Unité vitesse vent :", ["km/h", "m/s"])
+
+                if (st.session_state.form_data["grut_vent_unite"] == "km/h" and st.session_state.form_data["grut_vent_val"] > 36) or (st.session_state.form_data["grut_vent_unite"] == "m/s" and st.session_state.form_data["grut_vent_val"] > 10):
+                    st.error("❌ **BLOCAGE DE L'INTERVENTION : Vitesse du vent > 36km/h (10m/s).** Remplissage bloqué.")
+
+                st.session_state.form_data["grut_pesage"] = st.checkbox("Dispositif de mesure de charge présent", value=st.session_state.form_data["grut_pesage"])
+                if st.session_state.form_data["grut_pesage"]:
+                    st.info("Règle appliquée : Charge totale maxi < 90% charge de la grue.")
+                else:
+                    st.warning("Règle appliquée : Charge totale maxi < 80% charge de la grue.")
+
+                st.session_state.form_data["grut_centre_gravite"] = st.checkbox("Prise en compte du centre de gravité de la grue", value=st.session_state.form_data["grut_centre_gravite"])
+                st.session_state.form_data["grut_angles_elingue"] = st.checkbox("Prise en compte des angles d'élingage au plan de grutage", value=st.session_state.form_data["grut_angles_elingue"])
+                st.session_state.form_data["grut_plaques_rep"] = st.checkbox("Descente de charge sur plaque de répartition en ligne avec analyse de sol", value=st.session_state.form_data["grut_plaques_rep"])
+
+                st.write("##### Signatures grutage automatiques :")
+                st.write(f"- Chef de manœuvre : `{st.session_state.form_data['grut_chef_m_nom']} - {st.session_state.form_data['grut_chef_m_soc']}`")
+                st.write(f"- Élingueur : `{st.session_state.form_data['grut_elingueur_nom']} - {st.session_state.form_data['grut_elingueur_soc']}`")
+                st.write(f"- Grutier : `{st.session_state.form_data['grut_grutier_nom']} - {st.session_state.form_data['grut_grutier_soc']}`")
+
+                st.write("##### Vérification du matériel et charge :")
+                st.write("*Matériel de levage :*")
+                st.session_state.form_data["grut_certif_grue"] = st.checkbox(f"Certificat de conformité de la grue (Immatriculation : {st.session_state.form_data['grut_immat']})", value=st.session_state.form_data["grut_certif_grue"])
+                st.session_state.form_data["grut_certif_acc"] = st.checkbox("Certificat de conformité des accessoires de levage utilisés", value=st.session_state.form_data["grut_certif_acc"])
+                st.session_state.form_data["grut_certif_plaques"] = st.checkbox("Certificat de conformité des plaques de répartition", value=st.session_state.form_data["grut_certif_plaques"])
+                st.session_state.form_data["grut_check_j_grue"] = st.checkbox("Check list de vérification journalière de la grue", value=st.session_state.form_data["grut_check_j_grue"])
+                st.session_state.form_data["grut_check_j_acc"] = st.checkbox("Check list de vérification journalière des accessoires", value=st.session_state.form_data["grut_check_j_acc"])
+
+                st.write("*Pattes de levage et charge :*")
+                st.session_state.form_data["grut_pattes_concu"] = st.checkbox("Pattes de fixation conçues pour le levage", value=st.session_state.form_data["grut_pattes_concu"])
+                st.session_state.form_data["grut_pattes_defaut"] = st.checkbox("Pattes de levage exemptes de défauts", value=st.session_state.form_data["grut_pattes_defaut"])
+                st.session_state.form_data["grut_pattes_adequation"] = st.checkbox("Adéquation pattes de levage / crochet manille", value=st.session_state.form_data["grut_pattes_adequation"])
+                st.session_state.form_data["grut_charges_annexes"] = st.checkbox("Les charges annexes sont correctement fixées à la charge principale", value=st.session_state.form_data["grut_charges_annexes"])
+
+                st.session_state.form_data["grut_schema_commentaires"] = st.text_area("Champ libre pour faire schéma de levage... ou commentaires :", value=st.session_state.form_data["grut_schema_commentaires"])
+
+                st.write("##### 3 signatures obligatoires grutage :")
+                st.text_input("1. Chef de manœuvre de la société extérieure :", value=st.session_state.form_data["grut_chef_m_nom"])
+                st.session_state.form_data["grut_do_sign"] = st.text_input("2. Le donneur d'ordre (après celle-ci début d'installation autorisé) :", value=st.session_state.form_data["grut_do_sign"])
+                st.session_state.form_data["grut_casque_rouge_sign"] = st.text_input("3. Le casque rouge (obligatoire pour commencer l'intervention) :", value=st.session_state.form_data["grut_casque_rouge_sign"])
+                st.divider()
+
+            # ---------------------------------------------------------
+            # 6. PERMIS ESPACE CONFINÉ
+            # ---------------------------------------------------------
             if st.session_state.form_data["p_confine"]:
-                has_spe = True
-                st.info("🦺 **PERMIS ENTRÉE EN ESPACE CONFINÉ (CBA 105)**")
-                st.warning("🥽 **EPI Obligatoire :** Masque Auto-sauveteur de type M20 à la ceinture.")
+                st.info("🦺 **PERMIS ENTRÉE EN ESPACE CONFINÉ**")
+                st.error("🥽 **EPI IMPOSÉ :** Masque auto-sauveteur (type M20)")
 
                 st.session_state.form_data["conf_lieu"] = st.text_input("Lieu précis de l'entrée en espace confiné :", value=st.session_state.form_data["conf_lieu"])
-                st.session_state.form_data["conf_troudhomme_610"] = st.checkbox("Trou d'homme >= 610 mm", value=True)
+
+                st.write("##### Risques liés à l'intervention :")
+                cr1, cr2, cr3 = st.columns(3)
+                with cr1:
+                    st.session_state.form_data["conf_r_atmo"] = st.checkbox("Atmosphère dangereuse", value=st.session_state.form_data["conf_r_atmo"])
+                    st.session_state.form_data["conf_r_chimique"] = st.checkbox("Substance chimique ou résidus dans la cuve", value=st.session_state.form_data["conf_r_chimique"])
+                    st.session_state.form_data["conf_r_inflam"] = st.checkbox("Substances Inflammables/Combustibles", value=st.session_state.form_data["conf_r_inflam"])
+                with cr2:
+                    st.session_state.form_data["conf_r_orga"] = st.checkbox("Matières organiques en décomposition", value=st.session_state.form_data["conf_r_orga"])
+                    st.session_state.form_data["conf_r_meca"] = st.checkbox("Équipement mécanique en mouvement", value=st.session_state.form_data["conf_r_meca"])
+                    st.session_state.form_data["conf_r_thermiq"] = st.checkbox("Risques thermiques/Brûlures", value=st.session_state.form_data["conf_r_thermiq"])
+                with cr3:
+                    st.session_state.form_data["conf_r_bruit"] = st.checkbox("Bruit important pouvant perturber la communication", value=st.session_state.form_data["conf_r_bruit"])
+                    st.session_state.form_data["conf_troudhomme_610"] = st.checkbox("Trou d'homme >= 610mm", value=st.session_state.form_data["conf_troudhomme_610"])
+
                 if not st.session_state.form_data["conf_troudhomme_610"]:
-                    st.error("🚨 **Plan de secours spécifique CATEC requis (Trou d'homme < 610mm).**")
+                    st.error("🚨 **Si NON à Trou d'homme >= 610mm = Plan de secours spécifique obligatoire.**")
 
-                st.markdown("##### Mesures Atmosphériques Préalables")
-                cm1, cm2, cm3 = st.columns(3)
-                with cm1: st.session_state.form_data["conf_o2"] = st.number_input("Niveau d'Oxygène O2 (19.5% - 23.0%) :", value=20.9)
-                with cm2: st.session_state.form_data["conf_co"] = st.number_input("Niveau Monoxyde CO (ppm) :", value=0.0)
-                with cm3: st.session_state.form_data["conf_explo"] = st.number_input("Explosimétrie LEL (%) :", value=0.0)
+                st.write("##### EPI et formations :")
+                st.session_state.form_data["conf_catec"] = st.checkbox("Intervenants formés et qualifiés CATEC", value=st.session_state.form_data["conf_catec"])
+                st.session_state.form_data["conf_hauteur"] = st.checkbox("Travail en hauteur qualifié", value=st.session_state.form_data["conf_hauteur"])
+                st.session_state.form_data["conf_m20"] = st.checkbox("Masque auto-sauveteur (type M20) vérifié", value=st.session_state.form_data["conf_m20"])
 
+                st.write("##### Check list obligatoire pour une entrée en espace confiné :")
+                st.write(f"- Secouriste de la zone : `{st.session_state.form_data['conf_secouriste']}`")
+                st.write(f"- Service médical de l'intervention : `{st.session_state.form_data['conf_medical']}`")
+
+                st.session_state.form_data["conf_action_chaud"] = st.checkbox("Allez-vous couper, poncer, souder, riveter, gratter à l'intérieur de l'espace confiné ?", value=st.session_state.form_data["conf_action_chaud"])
+                if st.session_state.form_data["conf_action_chaud"]:
+                    st.warning("⚠️ **Si OUI = Renvoi au permis point chaud (Permis Point Chaud activé).**")
+                    st.session_state.form_data["p_points_chauds"] = True
+
+                st.session_state.form_data["conf_ventilation_nat"] = st.checkbox("Vérification que la ventilation naturelle est suffisante et présente (48h avant) ?", value=st.session_state.form_data["conf_ventilation_nat"])
+                st.session_state.form_data["conf_ventilation_forcee"] = st.checkbox("Allez-vous installer une ventilation forcée auxiliaire ?", value=st.session_state.form_data["conf_ventilation_forcee"])
+                if st.session_state.form_data["conf_ventilation_forcee"]:
+                    st.info("Règle appliquée : Minimum 56 m3/h par personne.")
+
+                st.session_state.form_data["conf_consignation_gaz"] = st.checkbox("Vérification de la fermeture et de la consignation de toutes les arrivées de produits ou gaz", value=st.session_state.form_data["conf_consignation_gaz"])
+                if st.session_state.form_data["conf_consignation_gaz"]:
+                    st.info("Renvoi au permis consignation et coche Consignation/séparation OU pose de joints pleins (PG).")
+                    st.session_state.form_data["p_consignation"] = True
+
+                st.session_state.form_data["conf_cuve_vide"] = st.checkbox("Vérifier que les cuves ou espaces sont vides pour éviter les risques de noyade", value=st.session_state.form_data["conf_cuve_vide"])
+                st.session_state.form_data["conf_vol_caches"] = st.checkbox("Vérifier que tous les espaces sont contrôlés et qu'il n'y a pas de volumes cachés qui emprisonneraient un gaz ou un liquide", value=st.session_state.form_data["conf_vol_caches"])
+                st.session_state.form_data["conf_eclairage_24v"] = st.checkbox("Vérifier que le niveau d'éclairage est suffisant (Éclairage 24 VOLT TBT ou autonome)", value=st.session_state.form_data["conf_eclairage_24v"])
+                st.session_state.form_data["conf_blocage_ouvert"] = st.checkbox("Bloquer l'ouverture en position ouverte pour éviter la fermeture accidentelle", value=st.session_state.form_data["conf_blocage_ouvert"])
+
+                st.session_state.form_data["conf_echaf_echelle"] = st.checkbox("Allez-vous installer un échafaudage ou une échelle dans cet espace ?", value=st.session_state.form_data["conf_echaf_echelle"])
+                if st.session_state.form_data["conf_echaf_echelle"]:
+                    st.info("Contrôle d'accès et d'encombrement de l'issue de secours.")
+
+                st.session_state.form_data["conf_prod_chim"] = st.checkbox("La zone contenait ou contient des produits chimiques ?", value=st.session_state.form_data["conf_prod_chim"])
+                if st.session_state.form_data["conf_prod_chim"]:
+                    st.warning("⚠️ **Si OUI = Vérifier les VLEP dans les FDS.**")
+
+                st.session_state.form_data["conf_laser"] = st.checkbox("Vérifier qu'il n'y a pas d'émission Laser dans cet environnement", value=st.session_state.form_data["conf_laser"])
+                st.session_state.form_data["conf_comm_type"] = st.selectbox("La communication entre l'entrant et le stand by est efficace et fonctionnelle via :", ["Talkie Walkie", "Visuelle", "Téléphone"])
+
+                st.write("##### Mesures à prendre (Encarts numériques) :")
+                co1, co2 = st.columns(2)
+                with co1:
+                    st.session_state.form_data["conf_o2"] = st.number_input("Niveau d'oxygène (19,5% < O2 < 23%) - Encart numérique %O2 :", value=st.session_state.form_data["conf_o2"])
+                    st.session_state.form_data["conf_o2_contre_mesure"] = st.number_input("Contre-mesure DO (partie validation) - Encart numérique %O2 :", value=st.session_state.form_data["conf_o2_contre_mesure"])
+                with co2:
+                    st.session_state.form_data["conf_h2s_check"] = st.checkbox("Présence de H2S ?", value=st.session_state.form_data["conf_h2s_check"])
+                    if st.session_state.form_data["conf_h2s_check"]:
+                        st.session_state.form_data["conf_h2s"] = st.number_input("Encart numérique %H2S :", value=st.session_state.form_data["conf_h2s"])
+
+                    st.session_state.form_data["conf_co_check"] = st.checkbox("Présence de CO ?", value=st.session_state.form_data["conf_co_check"])
+                    if st.session_state.form_data["conf_co_check"]:
+                        st.session_state.form_data["conf_co"] = st.number_input("Encart numérique %CO :", value=st.session_state.form_data["conf_co"])
+
+                    st.session_state.form_data["conf_explo_check"] = st.checkbox("Explosimétrie ?", value=st.session_state.form_data["conf_explo_check"])
+                    if st.session_state.form_data["conf_explo_check"]:
+                        st.session_state.form_data["conf_explo"] = st.number_input("Encart numérique % :", value=st.session_state.form_data["conf_explo"])
+
+                st.session_state.form_data["conf_temp_cuve"] = st.number_input("Vérifier que la cuve ou les produits ne dépassent pas 45°C - Encart °C :", value=st.session_state.form_data["conf_temp_cuve"])
+                st.session_state.form_data["conf_verif_temp"] = st.selectbox("Vérificateur température cuve :", ["N2", "DO"])
+
+                st.session_state.form_data["conf_inflam_lel"] = st.number_input("En cas de produit inflammable — Vérification du seuil < 10% LEL (% LEL) :", value=st.session_state.form_data["conf_inflam_lel"])
+                st.session_state.form_data["conf_verif_lel"] = st.selectbox("Vérificateur seuil LEL :", ["N2", "DO"])
+
+                st.session_state.form_data["conf_schema_commentaires"] = st.text_area("Champs libre pour faire schéma ou commentaires (Espace confiné) :", value=st.session_state.form_data["conf_schema_commentaires"])
+
+                st.write("##### 3 signatures obligatoires Espace Confiné :")
+                st.session_state.form_data["conf_entrant"] = st.text_input("1. Entrants :", value=st.session_state.form_data["conf_entrant"])
+                st.session_state.form_data["conf_standby"] = st.text_input("2. Stand by :", value=st.session_state.form_data["conf_standby"])
+                st.session_state.form_data["conf_do"] = st.text_input("3. Donneur d'ordre :", value=st.session_state.form_data["conf_do"])
                 st.divider()
 
-            # --- 7. TRAVAIL ÉLECTRIQUE ---
+            # ---------------------------------------------------------
+            # 7. PERMIS TRAVAUX ÉLECTRIQUES
+            # ---------------------------------------------------------
             if st.session_state.form_data["p_electrique"]:
-                has_spe = True
-                st.error("⚡ **PERMIS TRAVAUX ÉLECTRIQUES (NF C 18-510)**")
-                st.warning("🔒 **Rappel :** Les travaux sous tension sont STRICTEMENT INTERDITS. Les travaux au voisinage doivent être validés.")
+                st.error("⚡ **PERMIS TRAVAUX ÉLECTRIQUES**")
+                st.warning("🥽 **EPI DE BASE ÉLECTRIQUE :** Casque d'électricien, Gants isolants électriques (EN 60903) + Surgants en cuir de protection mécanique + Vêtements de travail 100 % coton ou ignifugés (interdiction du synthétique).")
+                st.info("📣 **Rappel :** Les travaux électriques sous tension sont interdits. Les travaux au voisinage de pièces nues sous tension doivent être validés. Les outils utilisés doivent être isolés.")
 
-                st.session_state.form_data["elec_voisinage_nues"] = st.checkbox("Travail au voisinage de pièces nues sous tension", value=st.session_state.form_data["elec_voisinage_nues"])
+                st.write("##### Liste à cocher :")
+                ce1, ce2 = st.columns(2)
+                with ce1:
+                    st.session_state.form_data["elec_modife"] = st.checkbox("Modification d'installation", value=st.session_state.form_data["elec_modife"])
+                    st.session_state.form_data["elec_armoire"] = st.checkbox("Intervention dans les armoires, enveloppe, coffret", value=st.session_state.form_data["elec_armoire"])
+                    st.session_state.form_data["elec_voisinage_tension"] = st.checkbox("Travail au voisinage de la tension", value=st.session_state.form_data["elec_voisinage_tension"])
+                    st.session_state.form_data["elec_courant_faible"] = st.checkbox("Courants faibles, instrumentation", value=st.session_state.form_data["elec_courant_faible"])
+                with ce2:
+                    st.session_state.form_data["elec_releve"] = st.checkbox("Relevés / Mesures ou essais", value=st.session_state.form_data["elec_releve"])
+                    st.session_state.form_data["elec_chemins"] = st.checkbox("Chemins de câbles / câbles et raccordement", value=st.session_state.form_data["elec_chemins"])
+                    st.session_state.form_data["elec_voisinage_nues"] = st.checkbox("Travail au voisinage de pièces nues sous tension", value=st.session_state.form_data["elec_voisinage_nues"])
+
                 if st.session_state.form_data["elec_voisinage_nues"]:
-                    st.error("🥽 **EPIs Spécifiques Voisinage requis :** Écran facial Arc-Flash (GS-ET-29 Class 2) + Vestes Arc-Flash EN ISO 11612 + Nappes et Tapis Isolants (EN 61112).")
-                    st.session_state.form_data["elec_valideur_ei"] = st.text_input("Validation obligatoire E&I / PT E&I (B2V/H2V, BC/HC) :", value=st.session_state.form_data["elec_valideur_ei"])
+                    st.error("🔒 **Si Travail au voisinage de pièces nues sous tension coché :** Validation par E&I ou PT E&I habilité B2 ou H2, BC ou HC suivant la tension.")
+                    st.error("🥽 **EPIs EN PLUS :** Écran facial / Visière panoramique anti-arc électrique (EN 166B / GS-ET-29 Class 1 ou 2) + Vestes/vêtements de protection anti-arc électrique (Arc Flash EN ISO 11612) + Nappes isolantes et tapis isolant de sol (EN 61112) pour recouvrir les parties sous tension adjacentes.")
+                    st.session_state.form_data["elec_valideur_ei"] = st.text_input("Nom du Valideur E&I :", value=st.session_state.form_data["elec_valideur_ei"])
                 st.divider()
 
-            # --- 8. CONSIGNATION LOTO (3 PHASES) ---
+            # ---------------------------------------------------------
+            # 8. PERMIS CONSIGNATION (3 PHASES)
+            # ---------------------------------------------------------
             if st.session_state.form_data["p_consignation"]:
-                has_spe = True
-                st.success("⚡ **PERMIS CONSIGNATION & SÉPARATION D'ÉNERGIES (LOTO)**")
+                st.success("⚡ **PERMIS CONSIGNATION EN 3 PHASES**")
                 
-                c_lo1, c_lo2 = st.columns(2)
-                with c_lo1:
-                    st.session_state.form_data["loto_methode_ouverture"] = st.selectbox("Méthode d'isolation ouverture de circuit :", ["2 vannes et vanne de drain", "2 vannes simples", "Vanne simple", "Vanne et désolidarisation", "Joint plein (PG)", "Joint plein et désolidarisation"])
-                    st.session_state.form_data["loto_loc1"] = st.text_input("Localisation Point d'Isolation 1 :", value=st.session_state.form_data["loto_loc1"])
-                with c_lo2:
-                    st.session_state.form_data["loto_loc2"] = st.text_input("Localisation Point d'Isolation 2 :", value=st.session_state.form_data["loto_loc2"])
+                st.write("##### 1. Ouverture de circuit : méthode et points d'isolation retenus")
+                st.session_state.form_data["loto_ouverture_methode"] = st.selectbox(
+                    "Méthode d'isolation :",
+                    ["2 vannes et vanne de drain", "2 vannes", "vanne simple", "vanne et désolidarisation de la conduite", "joint plein", "joint plein et désolidarisation de la conduite"]
+                )
+                
+                clo1, clo2 = st.columns(2)
+                with clo1: st.session_state.form_data["loto_ouvert_loc1"] = st.text_input("Localisation 1 (Ouverture de circuit) :", value=st.session_state.form_data["loto_ouvert_loc1"])
+                with clo2:
+                    if "vanne simple" not in st.session_state.form_data["loto_ouverture_methode"] and "joint plein" != st.session_state.form_data["loto_ouverture_methode"]:
+                        st.session_state.form_data["loto_ouvert_loc2"] = st.text_input("Localisation 2 (Ouverture de circuit) :", value=st.session_state.form_data["loto_ouvert_loc2"])
+
+                st.write("##### 2. Isolation des énergies : méthode de points d'isolation retenus")
+                cis1, cis2 = st.columns(2)
+                with cis1:
+                    st.session_state.form_data["loto_is_elec"] = st.checkbox("IS électrique", value=st.session_state.form_data["loto_is_elec"])
+                    if st.session_state.form_data["loto_is_elec"]:
+                        st.session_state.form_data["loto_is_elec_loc1"] = st.text_input("IS Élec Localisation 1 :", value=st.session_state.form_data["loto_is_elec_loc1"])
+                        st.session_state.form_data["loto_is_elec_loc2"] = st.text_input("IS Élec Localisation 2 :", value=st.session_state.form_data["loto_is_elec_loc2"])
+
+                    st.session_state.form_data["loto_fusible"] = st.checkbox("Fusibles enlevés", value=st.session_state.form_data["loto_fusible"])
+                    if st.session_state.form_data["loto_fusible"]:
+                        st.session_state.form_data["loto_fusible_loc1"] = st.text_input("Fusibles Localisation 1 :", value=st.session_state.form_data["loto_fusible_loc1"])
+                        st.session_state.form_data["loto_fusible_loc2"] = st.text_input("Fusibles Localisation 2 :", value=st.session_state.form_data["loto_fusible_loc2"])
+
+                    st.session_state.form_data["loto_cable"] = st.checkbox("Câble électrique déconnecté", value=st.session_state.form_data["loto_cable"])
+                    if st.session_state.form_data["loto_cable"]:
+                        st.session_state.form_data["loto_cable_loc1"] = st.text_input("Câble Localisation 1 :", value=st.session_state.form_data["loto_cable_loc1"])
+                        st.session_state.form_data["loto_cable_loc2"] = st.text_input("Câble Localisation 2 :", value=st.session_state.form_data["loto_cable_loc2"])
+
+                with cis2:
+                    st.session_state.form_data["loto_pneu"] = st.checkbox("IS pneumatique", value=st.session_state.form_data["loto_pneu"])
+                    if st.session_state.form_data["loto_pneu"]:
+                        st.session_state.form_data["loto_pneu_loc1"] = st.text_input("IS Pneu Localisation 1 :", value=st.session_state.form_data["loto_pneu_loc1"])
+                        st.session_state.form_data["loto_pneu_loc2"] = st.text_input("IS Pneu Localisation 2 :", value=st.session_state.form_data["loto_pneu_loc2"])
+
+                    st.session_state.form_data["loto_hydra"] = st.checkbox("IS hydraulique", value=st.session_state.form_data["loto_hydra"])
+                    if st.session_state.form_data["loto_hydra"]:
+                        st.session_state.form_data["loto_hydra_loc1"] = st.text_input("IS Hydra Localisation 1 :", value=st.session_state.form_data["loto_hydra_loc1"])
+                        st.session_state.form_data["loto_hydra_loc2"] = st.text_input("IS Hydra Localisation 2 :", value=st.session_state.form_data["loto_hydra_loc2"])
+
+                    st.session_state.form_data["loto_residu"] = st.checkbox("Énergies résiduelles", value=st.session_state.form_data["loto_residu"])
+                    if st.session_state.form_data["loto_residu"]:
+                        st.session_state.form_data["loto_residu_loc1"] = st.text_input("Énergies résiduelles Localisation 1 :", value=st.session_state.form_data["loto_residu_loc1"])
+                        st.session_state.form_data["loto_residu_loc2"] = st.text_input("Énergies résiduelles Localisation 2 :", value=st.session_state.form_data["loto_residu_loc2"])
+
+                st.write("##### 3. Nettoyage des équipements :")
+                cn1, cn2 = st.columns(2)
+                with cn1:
+                    st.session_state.form_data["loto_drain_ouvert"] = st.checkbox("Vanne de drain ouverte", value=st.session_state.form_data["loto_drain_ouvert"])
+                    st.session_state.form_data["loto_eq_ouvert"] = st.checkbox("Équipement ouvert", value=st.session_state.form_data["loto_eq_ouvert"])
+                with cn2:
+                    st.session_state.form_data["loto_eq_lave"] = st.checkbox("Équipement lavé", value=st.session_state.form_data["loto_eq_lave"])
+                    st.session_state.form_data["loto_eq_sanitise"] = st.checkbox("Équipement sanitisé", value=st.session_state.form_data["loto_eq_sanitise"])
                 st.divider()
 
-            # --- 9. SYSTÈME À RISQUES / ATEX / CHIMIQUE ---
+            # ---------------------------------------------------------
+            # 9. PERMIS SYSTÈME À RISQUES / ATEX / FLUIDES DANGEREUX
+            # ---------------------------------------------------------
             if st.session_state.form_data["p_systeme_risque"]:
-                has_spe = True
-                st.error("☣️ **PERMIS SYSTÈMES À RISQUES / ATEX / CHIMIQUE PARTICULIER**")
-                
-                csr1, csr2, csr3 = st.columns(3)
-                with csr1: st.session_state.form_data["sr_chimique_c1"] = st.checkbox("Chimique Classe 1 (BFA, HCl...)", value=True)
-                with csr2: st.session_state.form_data["sr_fluide_dang"] = st.checkbox("Fluides Dangereux (Soude, Vapeur...)", value=False)
-                with csr3: st.session_state.form_data["sr_atex"] = st.checkbox("Zone ATEX (Zone 0, 1, 2)", value=False)
+                st.error("☣️️ **PERMIS SYSTÈME À RISQUES**")
+                st.info("Renvoi au permis consignation ci-dessus effectué automatiquement.")
 
-                st.session_state.form_data["sr_epi_comb2"] = st.checkbox("Combinaison 2 pièces anti-acide + Bottes sous pantalon", value=True)
-                st.info("✍️ **3 Signatures Spécifiques :** Intervenant Qualifié Système à Risques + Donneur d'Ordre P&G + Responsable Exploitation/Opérations.")
+                st.write("##### Case à cocher :")
+                st.session_state.form_data["sr_chimique_c1"] = st.checkbox("Chimique de classe 1 (BFA, Ethanol, Néodol/OG base, Acide chlorydrique)", value=st.session_state.form_data["sr_chimique_c1"])
+                if st.session_state.form_data["sr_chimique_c1"]:
+                    st.session_state.form_data["sr_chimique_nom"] = st.text_input("Nom du produit (Chimique Classe 1) :", value=st.session_state.form_data["sr_chimique_nom"])
+
+                st.session_state.form_data["sr_fluide_dang"] = st.checkbox("Fluides dangereux (Parfum, soude, Caustique, Azote, Vapeur, Gaz Naturel)", value=st.session_state.form_data["sr_fluide_dang"])
+                if st.session_state.form_data["sr_fluide_dang"]:
+                    st.session_state.form_data["sr_fluide_nom"] = st.text_input("Nom du produit (Fluides dangereux) :", value=st.session_state.form_data["sr_fluide_nom"])
+
+                st.session_state.form_data["sr_atex"] = st.checkbox("Zone ATEX", value=st.session_state.form_data["sr_atex"])
+                if st.session_state.form_data["sr_atex"]:
+                    st.session_state.form_data["sr_atex_nom"] = st.text_input("Nom du produit (Zone ATEX) :", value=st.session_state.form_data["sr_atex_nom"])
+
+                st.write("##### Évaluation des risques :")
+                st.write("*Avant le démarrage des travaux :*")
+                cera1, cera2 = st.columns(2)
+                with cera1:
+                    st.session_state.form_data["sr_balisage"] = st.checkbox("Balisage de la zone", value=st.session_state.form_data["sr_balisage"])
+                    st.session_state.form_data["sr_douche_rince"] = st.checkbox("Vérification fonctionnement douche et lave œil", value=st.session_state.form_data["sr_douche_rince"])
+                    st.session_state.form_data["sr_ramonage"] = st.checkbox("Ramonage de conduite effectué", value=st.session_state.form_data["sr_ramonage"])
+                    if st.session_state.form_data["sr_ramonage"]:
+                        st.session_state.form_data["sr_ramonage_dt"] = st.text_input("Effectué le (date et heure) :", value=st.session_state.form_data["sr_ramonage_dt"])
+                with cera2:
+                    st.session_state.form_data["sr_isolement"] = st.checkbox("Vérification d'isolement des circuits", value=st.session_state.form_data["sr_isolement"])
+                    st.session_state.form_data["sr_feuille_loto"] = st.checkbox("Feuille de consignation disponible, complétée et signée", value=st.session_state.form_data["sr_feuille_loto"])
+                    if st.session_state.form_data["sr_atex"]:
+                        st.session_state.form_data["sr_zonage_atex"] = st.checkbox("Vérification du plan de zonage ATEX (zone 0, 1, 2)", value=st.session_state.form_data["sr_zonage_atex"])
+
+                st.write("*Pendant l'exécution des travaux (EPIs) :*")
+                cepi1, cepi2 = st.columns(2)
+                with cepi1:
+                    st.session_state.form_data["sr_epi_ecran"] = st.checkbox("Écran facial", value=st.session_state.form_data["sr_epi_ecran"])
+                    st.session_state.form_data["sr_epi_lunettes"] = st.checkbox("Lunettes étanches", value=st.session_state.form_data["sr_epi_lunettes"])
+                    st.session_state.form_data["sr_epi_gants_chim"] = st.checkbox("Gants chimiques adaptés", value=st.session_state.form_data["sr_epi_gants_chim"])
+                    st.session_state.form_data["sr_epi_comb1"] = st.checkbox("Combinaison 1 pièce en viton neoprène", value=st.session_state.form_data["sr_epi_comb1"])
+                    st.session_state.form_data["sr_epi_comb2"] = st.checkbox("Combinaison 2 pièces anti-acide", value=st.session_state.form_data["sr_epi_comb2"])
+                    st.session_state.form_data["sr_epi_bottes"] = st.checkbox("Bottes anti-acide (sous pantalon)", value=st.session_state.form_data["sr_epi_bottes"])
+                with cepi2:
+                    st.session_state.form_data["sr_epi_cartouche"] = st.checkbox("Masque à cartouche approprié", value=st.session_state.form_data["sr_epi_cartouche"])
+                    st.session_state.form_data["sr_epi_ari"] = st.checkbox("ARI (Appareil Respiratoire Isolant)", value=st.session_state.form_data["sr_epi_ari"])
+                    st.session_state.form_data["sr_epi_3m6000"] = st.checkbox("Masque 3M 6000", value=st.session_state.form_data["sr_epi_3m6000"])
+                    st.session_state.form_data["sr_epi_versaflo"] = st.checkbox("Casque ventilé Jupiter avec cartouche chimique (Versaflo)", value=st.session_state.form_data["sr_epi_versaflo"])
+                    st.session_state.form_data["sr_epi_no_versaflo"] = st.checkbox("Pas de Versaflo", value=st.session_state.form_data["sr_epi_no_versaflo"])
+
+                st.session_state.form_data["sr_auxiliaire_equipe"] = st.checkbox("Auxiliaire équipé comme intervenant", value=st.session_state.form_data["sr_auxiliaire_equipe"])
+                st.session_state.form_data["sr_comm_moyen"] = st.text_input("Moyen de communication adapté (texte libre) :", value=st.session_state.form_data["sr_comm_moyen"])
+
+                st.write("*Après l'exécution des travaux :*")
+                st.session_state.form_data["sr_inspect_remise"] = st.checkbox("Inspection du circuit après remise en service", value=st.session_state.form_data["sr_inspect_remise"])
+                if st.session_state.form_data["sr_inspect_remise"]:
+                    st.session_state.form_data["sr_inspect_nom"] = st.text_input("Nom du vérificateur :", value=st.session_state.form_data["sr_inspect_nom"])
+                    st.session_state.form_data["sr_inspect_dt"] = st.text_input("Fait le (Date et heure à choisir) :", value=st.session_state.form_data["sr_inspect_dt"])
+
+                st.session_state.form_data["sr_schema_commentaires"] = st.text_area("Champs libre pour faire schéma de levage... ou commentaires (Système à risques) :", value=st.session_state.form_data["sr_schema_commentaires"])
+
+                st.write("##### 3 signatures obligatoires Systèmes à Risques :")
+                st.session_state.form_data["sr_sign_intervenant"] = st.text_input("1. Intervenants qualifiés sur le système à risques :", value=st.session_state.form_data["sr_sign_intervenant"])
+                st.session_state.form_data["sr_sign_do"] = st.text_input("2. Le donneur d'ordre :", value=st.session_state.form_data["sr_sign_do"])
+                st.session_state.form_data["sr_sign_operations"] = st.text_input("3. Opérations (également obligatoire pour commencer l'intervention) :", value=st.session_state.form_data["sr_sign_operations"])
                 st.divider()
 
-            if not has_spe:
-                st.success("✅ Aucun permis spécifique ou formulaire HRT supplémentaire requis.")
+            st.info("📣 **Tous les EPIs dans ces permis spécifiques sont ceux à porter EN PLUS des EPIs de base du permis de travail général.**")
 
             c_back, c_next = st.columns(2)
             with c_back:
-                if st.button("⬅️ Précédent"): st.session_state.step = 5; st.rerun()
+                if st.button("⬅️ Précédent"): st.step = 5; st.rerun()
             with c_next:
                 if st.button("Suivant ➔", type="primary"): st.session_state.step = 7; st.rerun()
 
-        # =====================================================
-        # ÉTAPE 7 : SYNTHÈSE, PDF DIRECT & SIGNATURES
-        # =====================================================
+        # ==============================================================================
+        # ÉTAPE 7 : SYNTHÈSE, PDF ET VALIDATION BATCH
+        # ==============================================================================
         elif current_step == 7:
-            st.subheader("7. Synthèse Globale & Co-signatures Tactiles")
+            st.subheader("7. Synthèse & Validation du Permis de Travail")
 
             st.markdown("<div class='status-pending'>⚠️ PERMIS EN ATTENTE DE VALIDATION BATCH (07h30)</div>", unsafe_allow_html=True)
 
             if st.session_state.form_data["is_subcontractor"]:
-                st.warning(f"🤝 **Règle de Sous-traitance Active :** Signature du N2 Titulaire du PDP requise ({st.session_state.form_data['titulaire_n2']}).")
+                st.warning(f"⚠️ **RÈGLE DE SOUS-TRAITANCE PDP/MoP :** L'entreprise étant en sous-traitance, la validation du N2 de la société principale (**{st.session_state.form_data['titulaire_n2']}**) est également requise à la fin du permis.")
 
-            st.write("##### 📊 Tableau Récapitulatif Synthétique des Risques")
+            st.write("##### Tableau Synthétique des Risques & Permis Spécifiques Renseignés :")
             
             tableau_data = []
             if st.session_state.form_data["p_hauteur"]:
-                tableau_data.append({"activite": "Travail en Hauteur / Nacelle", "risque": "Chute de hauteur", "prevention": "Casque Jugulaire + Harnais + CACES PEMP"})
+                tableau_data.append({"activite": "Travail en Hauteur / Nacelle / Échafaudage", "risque": "Chute de hauteur", "prevention": "Casque jugulaire + VGP/Qualifications vérifiées"})
             if st.session_state.form_data["p_toiture"]:
-                tableau_data.append({"activite": "Accès Toiture", "risque": "Chute à travers toiture / Météo", "prevention": f"{st.session_state.form_data['toiture_protection']} + Travail en Binôme"})
+                tableau_data.append({"activite": "Accès Toiture", "risque": "Chute / Conditions Météo", "prevention": f"{st.session_state.form_data['toiture_protection']} + Accès 2 pers + Valideur ePDP"})
             if st.session_state.form_data["p_points_chauds"]:
-                tableau_data.append({"activite": "Point Chaud / Flamme", "risque": "Incendie / Brûlures", "prevention": f"Visière EN 166B + Gants Soudeur + Extincteurs ({st.session_state.form_data['chaud_extincteur1']}) + Ronde 1h"})
+                tableau_data.append({"activite": "Point Chaud / Flamme", "risque": "Incendie", "prevention": f"Écran facial/Cagoule + Extincteurs ({st.session_state.form_data['chaud_extincteur1']}/{st.session_state.form_data['chaud_extincteur2']}) + Vigie {st.session_state.form_data['chaud_vigie_nom']}"})
             if st.session_state.form_data["p_excavation"]:
-                tableau_data.append({"activite": "Excavation / Tranchée", "risque": "Effondrement / Réseaux enterrés", "prevention": f"DICT Validée + Blindage (>1.30m: {st.session_state.form_data['excav_profondeur_130']})"})
+                tableau_data.append({"activite": "Excavation / Tranchée", "risque": "Réseaux / Effondrement", "prevention": f"Plans 7 réseaux OK + DICT + 3 Signatures ({st.session_state.form_data['excav_chef_manoeuvre']}/{st.session_state.form_data['excav_do']}/{st.session_state.form_data['excav_casque_rouge']})"})
             if st.session_state.form_data["p_grutage"]:
-                tableau_data.append({"activite": "Grutage & Levage", "risque": "Chute de charge / Renversement", "prevention": f"Plan de Levage + Pesage automatique + Anémomètre (<36 km/h)"})
+                tableau_data.append({"activite": "Grutage", "risque": "Chute de charge", "prevention": f"Poids Total {st.session_state.form_data['grut_poids_charge']+st.session_state.form_data['grut_poids_acc']} {st.session_state.form_data['grut_unite']} + Anémomètre OK + 3 Signatures"})
             if st.session_state.form_data["p_confine"]:
-                tableau_data.append({"activite": "Espace Confiné", "risque": "Asphyxie / Anoxie", "prevention": f"Masque M20 + Contrôle O2 ({st.session_state.form_data['conf_o2']}%) + Standby"})
+                tableau_data.append({"activite": "Espace Confiné", "risque": "Asphyxie / Gaz", "prevention": f"Masque M20 + CATEC + O2 ({st.session_state.form_data['conf_o2']}%) + Standby {st.session_state.form_data['conf_standby']}"})
             if st.session_state.form_data["p_electrique"]:
-                tableau_data.append({"activite": "Travail Électrique", "risque": "Arc Flash / Électrocution", "prevention": "Gants EN 60903 + Casque Isolant + Outillage 1000V"})
+                tableau_data.append({"activite": "Travail Électrique", "risque": "Arc Flash / Électrocution", "prevention": "Casque isolant + Gants EN 60903 + Vêtements 100% coton/ignifugés"})
             if st.session_state.form_data["p_consignation"]:
-                tableau_data.append({"activite": "Consignation LOTO", "risque": "Énergie résiduelle", "prevention": f"Méthode {st.session_state.form_data['loto_methode_ouverture']} + Cadenassage"})
+                tableau_data.append({"activite": "Consignation (LOTO 3 phases)", "risque": "Énergie résiduelle", "prevention": f"Méthode {st.session_state.form_data['loto_ouverture_methode']} + Nettoyage OK"})
             if st.session_state.form_data["p_systeme_risque"]:
-                tableau_data.append({"activite": "Systèmes à Risques / ATEX", "risque": "Exposition chimique / Explosion", "prevention": "EPIs Anti-acide + Douche de sécurité + Accord Exploitation"})
+                tableau_data.append({"activite": "Systèmes à Risques / ATEX", "risque": "Produits chimiques / Explosion", "prevention": f"Balisage + Douche/Rince-œil + EPIs lourds + 3 Signatures ({st.session_state.form_data['sr_sign_intervenant']}/{st.session_state.form_data['sr_sign_do']}/{st.session_state.form_data['sr_sign_operations']})"})
 
             if not tableau_data:
-                tableau_data.append({"activite": "Travaux Généraux PDP", "risque": "Risques standards chantier", "prevention": "EPIs de base P&G Amiens"})
+                tableau_data.append({"activite": "Permis Général Standard", "risque": "Risques standards PDP", "prevention": "EPIs de base"})
 
             st.table(tableau_data)
 
-            st.divider()
-
-            # Signatures
-            st.write("##### ✍️ Co-signatures Tactiles de l'Équipe")
-            for idx, nom in enumerate(st.session_state.form_data["intervenants"]):
-                st.write(f"✍️ **Signature Intervenant {idx+1} : {nom}** [ Signé sur borne ]")
-
-            if st.session_state.form_data["is_subcontractor"]:
-                st.write(f"✍️ **Signature Obligatoire N2 Titulaire du PDP : {st.session_state.form_data['titulaire_n2']}** [ Signé sur borne ]")
-
-            st.divider()
-
-            permis_temp = {
-                "id": f"PT-2026-0928-0{len(st.session_state.permis_db)+1}",
+            permis_final = {
+                "id": f"PT-2026-EXACT-0{len(st.session_state.permis_db)+1}",
                 "date_travaux": st.session_state.form_data["date_str"],
                 "societe": st.session_state.form_data["societe"],
                 "pdp": st.session_state.form_data["pdp"],
@@ -797,64 +1018,45 @@ if role == "🖥️ Borne Kiosk Tactile (EE / N2)":
                 "statut": "EN_ATTENTE_BATCH",
                 "heure": datetime.datetime.now().strftime("%H:%M"),
                 "intervenants": list(st.session_state.form_data["intervenants"]),
-                "permis_specifiques": ["Hauteur" if st.session_state.form_data["p_hauteur"] else "", "Toiture" if st.session_state.form_data["p_toiture"] else "", "Point Chaud" if st.session_state.form_data["p_points_chauds"] else ""],
-                "derogations": [],
                 "tableau_risques": tableau_data
             }
 
-            pdf_bytes = generer_pdf_bytes(permis_temp)
+            pdf_bytes = generer_pdf_bytes(permis_final)
 
             c_back, c_sub, c_pdf = st.columns([1, 2, 2])
             with c_back:
                 if st.button("⬅️ Précédent"): st.session_state.step = 6; st.rerun()
 
             with c_pdf:
-                st.download_button(
-                    label="📄 TÉLÉCHARGER LE PERMIS PDF",
-                    data=pdf_bytes,
-                    file_name=f"Permis_P_and_G_{permis_temp['id']}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True
-                )
+                st.download_button("📄 TÉLÉCHARGER PERMIS EXHAUSTIF PDF", data=pdf_bytes, file_name=f"Permis_{permis_final['id']}.pdf", mime="application/pdf", use_container_width=True)
 
             with c_sub:
-                if st.button("🚀 SOUMETTRE LE PERMIS AU BATCH (07h30)", type="primary", use_container_width=True):
-                    st.session_state.permis_db.append(permis_temp)
-                    st.balloons(); st.success(f"Permis {permis_temp['id']} transmis avec succès !"); st.session_state.kiosk_mode = "HOME"
+                if st.button("🚀 SOUMETTRE AU BATCH DE 07h30", type="primary", use_container_width=True):
+                    st.session_state.permis_db.append(permis_final)
+                    st.balloons(); st.success(f"Permis {permis_final['id']} soumis au batch avec succès !"); st.session_state.kiosk_mode = "HOME"
 
 # ==============================================================================
-# INTERFACE 2 : DDS BOARD & BATCH 07H30 (DO / HSE)
+# INTERFACE 2 : DDS BOARD (DO / HSE)
 # ==============================================================================
 elif role == "📊 DDS Board & Batch 07h30 (DO / HSE)":
-    st.markdown("<div class='pg-header' style='background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);'><h2 style='margin:0;'>DDS BOARD & TABLEAU DE BORD DONNEUR D'ORDRE (DO)</h2></div>", unsafe_allow_html=True)
-
-    if st.button("✅ VALIDER LE BATCH DE 07h30 (AUTORISER TOUS LES PERMIS)", type="primary"):
+    st.markdown("<div class='pg-header' style='background: #0f172a;'><h2>DDS BOARD — VALIDATION BATCH DAILY</h2></div>", unsafe_allow_html=True)
+    if st.button("✅ VALIDER LE BATCH DE 07h30", type="primary"):
         for p in st.session_state.permis_db: p["statut"] = "VALIDÉ"
-        st.success("Fournée quotidienne validée ! Les permis sont officiellement actifs.")
+        st.success("Toutes les demandes de la fournée ont été validées !")
 
-    for pt in st.session_state.permis_db:
-        with st.expander(f"Permis {pt['id']} - {pt['societe']} ({pt['statut']})"):
-            st.write(f"**Zone :** {pt['zone']} | **N2 :** {pt['n2']}")
-            pdf_valid_bytes = generer_pdf_bytes(pt)
-            st.download_button("📄 Télécharger PDF Officiel", data=pdf_valid_bytes, file_name=f"Permis_{pt['id']}.pdf", mime="application/pdf", key=f"btn_{pt['id']}")
+    for p in st.session_state.permis_db:
+        st.write(f"### {p['id']} - {p['societe']} ({p['statut']})")
+        st.table(p.get("tableau_risques", []))
 
 # ==============================================================================
-# INTERFACE 3 : INSPECTION TERRAIN QR CODE (CASQUE ROUGE)
+# INTERFACE 3 : INSPECTION TERRAIN (CASQUE ROUGE)
 # ==============================================================================
 else:
-    st.markdown("<div class='pg-header' style='background: linear-gradient(135deg, #b91c1c 0%, #7f1d1d 100%);'><h2 style='margin:0;'>AUDIT TERRAIN & SCAN QR CODE — CASQUE ROUGE</h2></div>", unsafe_allow_html=True)
-
+    st.markdown("<div class='pg-header' style='background: #b91c1c;'><h2>INSPECTION TERRAIN — CASQUE ROUGE</h2></div>", unsafe_allow_html=True)
     if st.session_state.permis_db:
-        pt_sel = st.selectbox("Sélectionner un permis scanné sur zone :", [p["id"] for p in st.session_state.permis_db])
+        pt_sel = st.selectbox("Sélectionner un permis :", [p["id"] for p in st.session_state.permis_db])
         p = next(p for p in st.session_state.permis_db if p["id"] == pt_sel)
-        
-        st.write(f"### Permis Ref : {p['id']} ({p['statut']})")
-        st.write(f"**Entreprise :** {p['societe']} | **PDP :** {p['pdp']}")
-        st.write(f"**Signataires :** {', '.join(p['intervenants'])}")
-        
+        st.write(f"### Contrôle Permis : {p['id']}")
         st.table(p.get("tableau_risques", []))
-        
-        if st.button("✍️ Valider la Ronde de Sécurité Point Chaud (60 min)"):
-            st.success("Ronde de sécurité validée et horodatée par le Casque Rouge.")
     else:
-        st.info("Aucun permis émis pour le moment. Veuillez créer un permis sur la borne Kiosk.")
+        st.info("Aucun permis enregistré pour le moment.")

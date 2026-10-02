@@ -4,3 +4,4 @@ st-gsheets-connection
 openpyxl
 google-api-python-client
 google-auth
+fpdf2

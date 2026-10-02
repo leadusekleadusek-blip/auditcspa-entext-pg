@@ -40,37 +40,53 @@ if "local_audits" not in st.session_state:
 if "admin_authenticated" not in st.session_state:
     st.session_state["admin_authenticated"] = False
 
-# Style CSS dynamique
+# Style CSS dynamique adaptable (Thème Clair & Sombre)
 st.markdown("""
     <style>
-    .main-header { font-size: 28px; font-weight: bold; color: #1E3A8A; margin-bottom: 5px; }
-    .sub-header { font-size: 15px; color: #4B5563; margin-bottom: 20px; }
+    /* En-têtes adaptés au thème */
+    .main-header { 
+        font-size: 28px; 
+        font-weight: bold; 
+        color: var(--text-color, #1E3A8A); 
+        margin-bottom: 5px; 
+    }
     
+    .sub-header { 
+        font-size: 15px; 
+        color: var(--text-color, #4B5563); 
+        opacity: 0.8;
+        margin-bottom: 20px; 
+    }
+    
+    /* Cartes de questions : fond secondaire dynamique selon le thème clair/sombre */
     .question-card {
-        background-color: #FFFFFF;
-        border: 2px solid #CBD5E1;
+        background-color: var(--secondary-background-color, #FFFFFF);
+        color: var(--text-color, #1E3A8A);
+        border: 1px solid rgba(148, 163, 184, 0.3);
         border-radius: 10px;
         padding: 20px;
         margin-bottom: 15px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     }
     
+    /* Titre des questions */
     .question-title-big {
         font-size: 20px !important;
         font-weight: 700 !important;
-        color: #1E3A8A !important;
+        color: var(--text-color, #1E3A8A) !important;
         margin-bottom: 5px;
-        border-bottom: 2px solid #E2E8F0;
+        border-bottom: 2px solid rgba(148, 163, 184, 0.25);
         padding-bottom: 6px;
     }
     
+    /* Encart d'aide / Guidance : translucide pour s'adapter au fond clair ou sombre */
     .guidance-box { 
-        background-color: #F0F9FF; 
-        border-left: 4px solid #0284C7; 
+        background-color: rgba(2, 132, 199, 0.12) !important; 
+        border-left: 4px solid #0284C7 !important; 
         padding: 12px 16px; 
         border-radius: 6px; 
         font-size: 14px; 
-        color: #0369A1; 
+        color: var(--text-color) !important; 
         margin-top: 8px; 
         margin-bottom: 16px; 
     }

@@ -216,7 +216,7 @@ def enregistrer_audit_fichier_local(record):
         json.dump(audits, f, ensure_ascii=False, indent=2)
 
 def charger_audits_airtable():
-    """Charge les audits depuis Airtable."""
+    """Charge les audits depuis Airtable en récupérant le statut d'essai."""
     if not AIRTABLE_TOKEN or not AIRTABLE_BASE_ID:
         return []
     
@@ -233,12 +233,18 @@ def charger_audits_airtable():
                 data = resp.json()
                 for r in data.get("records", []):
                     fields = r.get("fields", {})
+                    is_test = fields.get("Test", False)  # Lit la case à cocher "Test"
+                    
                     if "Audit_Data" in fields:
                         try:
-                            records.append(json.loads(fields["Audit_Data"]))
+                            audit_dict = json.loads(fields["Audit_Data"])
+                            audit_dict["Is_Test"] = is_test
+                            records.append(audit_dict)
                         except Exception:
+                            fields["Is_Test"] = is_test
                             records.append(fields)
                     else:
+                        fields["Is_Test"] = is_test
                         records.append(fields)
                 offset = data.get("offset")
                 if not offset:
@@ -799,6 +805,13 @@ else:
             st.cache_data.clear()
 
         df_audits = charger_tous_les_audits()
+        # Filtre automatique : exclut les lignes cochées "Test" dans Airtable
+        if not df_audits.empty and "Is_Test" in df_audits.columns:
+            df_audits = df_audits[df_audits["Is_Test"] != True]
+
+        if df_audits.empty:
+            st.warning("⚠️ Aucun audit réel n'a encore été enregistré.")
+        else:
 
         if df_audits.empty:
             st.warning("⚠️ Aucun audit n'a encore été enregistré.")

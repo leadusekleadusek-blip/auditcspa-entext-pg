@@ -250,7 +250,7 @@ def charger_audits_airtable():
     return records
 
 def enregistrer_audit_airtable(record):
-    """Envoie une nouvelle ligne d'audit vers Airtable (version nettoyée)."""
+    """Envoie une nouvelle ligne d'audit vers Airtable en évitant les erreurs de taille (413)."""
     if not AIRTABLE_TOKEN or not AIRTABLE_BASE_ID:
         st.error("❌ Configuration Airtable manquante dans les Secrets Streamlit.")
         return False
@@ -261,13 +261,21 @@ def enregistrer_audit_airtable(record):
         "Content-Type": "application/json"
     }
     
+    # Création d'une copie allégée pour Airtable (limite de 100 Ko par champ)
+    record_airtable = json.loads(json.dumps(record))
+    for key, val in record_airtable.items():
+        if key.endswith("_Fichier") and isinstance(val, dict):
+            # Si le fichier dépasse ~50 Ko en base64, on ne garde que son nom pour ne pas bloquer l'API
+            if val.get("data") and len(val["data"]) > 50000:
+                val["data"] = "[Fichier lourd conservé en sauvegarde locale / export Excel]"
+
     payload = {
         "fields": {
             "Entreprise": str(record.get("Entreprise", "")),
             "Déclarant": str(record.get("Déclarant", "")),
             "Site": str(record.get("Site", "")),
             "Date": str(record.get("Date", "")),
-            "Audit_Data": json.dumps(record, ensure_ascii=False)
+            "Audit_Data": json.dumps(record_airtable, ensure_ascii=False)
         }
     }
     

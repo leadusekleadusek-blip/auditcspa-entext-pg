@@ -503,6 +503,10 @@ else:
         st.sidebar.markdown("### 📊 Traçabilité Administrateur")
         df_admin_side = charger_tous_les_audits()
 
+        # Exclusion des essais dans la sidebar admin
+        if not df_admin_side.empty and "Is_Test" in df_admin_side.columns:
+            df_admin_side = df_admin_side[df_admin_side["Is_Test"] != True]
+
         if not df_admin_side.empty:
             total_audits_count = len(df_admin_side)
             scores_list = []
@@ -535,7 +539,7 @@ else:
                 key="sidebar_admin_audit_select"
             )
         else:
-            st.sidebar.info("Aucun audit disponible dans la base.")
+            st.sidebar.info("Aucun audit réel disponible dans la base.")
     else:
         st.sidebar.info("🔒 Veuillez saisir le mot de passe dans l'espace principal pour débloquer l'administration.")
 
@@ -811,9 +815,6 @@ else:
 
         if df_audits.empty:
             st.warning("⚠️ Aucun audit réel n'a encore été enregistré.")
-        else:
-        if df_audits.empty:
-            st.warning("⚠️ Aucun audit n'a encore été enregistré.")
         else:
             # --- TABLEAU RÉCAPITULATIF DE TRAÇABILITÉ GLOBALE ---
             st.markdown("---")

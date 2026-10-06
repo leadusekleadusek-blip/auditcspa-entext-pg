@@ -812,7 +812,6 @@ else:
         if df_audits.empty:
             st.warning("⚠️ Aucun audit réel n'a encore été enregistré.")
         else:
-
         if df_audits.empty:
             st.warning("⚠️ Aucun audit n'a encore été enregistré.")
         else:
